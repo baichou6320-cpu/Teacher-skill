@@ -1,0 +1,96 @@
+# 项目状态总览
+
+> **更新日期**：2026-05-02
+> **当前阶段**：Phase 2 核心任务 ✅ 已完成（本地单元测试 102/102 通过）
+> **阅读建议**：每天开工前看一遍，确认今天要修哪个模块
+
+---
+
+## 一、核心能力状态
+
+```
+用户输入材料 → LLM 分析切片 → 逐个讲解 → 提问 → 用户回答
+    → 判卷 → 正确（标记掌握 + 连击奖励）→ 下一知识点 ✅
+    → 判卷 → 错误（渐进提示 hint_level 1-4）→ 重新作答 ✅
+    → /direct → 直接给答案（标记 needs_review）→ 下一知识点 ✅
+```
+
+**附加能力：**
+- `--file` / `/load` 加载本地文件（.md/.txt/.pdf）✅
+- Prompt 分层架构（base + persona + system module）✅
+- 单元测试 102 个，无需 API Key 即可运行，本地已通过 ✅
+- 标准 Agent Skill 结构已建立：`skills/heuristic-teacher/SKILL.md` ✅
+- README 已精简为项目入口，文档已按 product/development/learning-notes/install 分区 ✅
+- GitHub Actions 单测工作流已添加，等待推送后验证 ✅
+
+**结论：Phase 2 核心教学闭环 + 工程基建已可用。**
+
+---
+
+## 二、模块状态矩阵
+
+| 模块 | 文件 | 状态 | 备注 |
+|------|------|------|------|
+| 状态机调度 | `src/core/engine.py` | ✅ 可用 | `TutorState` 管理完整流程，支持 split/merged prompt 模式 |
+| 对话记忆 | `src/core/memory.py` | ✅ 已接入 | 上下文注入、历史恢复 |
+| 连击激励 | `src/core/rewards.py` | ✅ 已接入 | 答对时追加鼓励语，跨天 streak 计算 |
+| LLM 客户端 | `src/llm/client.py` | ✅ 可用 | 重试、thinking 提取、分类异常（timeout/auth/rate-limit） |
+| 响应解析 | `src/llm/translator.py` | ✅ 可用 | 4层降级 JSON 提取，边界 case 已补单元测试 |
+| 文件加载 | `src/utils/file_loader.py` | ✅ 可用 | .md/.txt（编码回退）/.pdf（pypdf） |
+| 文件存储 | `src/utils/storage.py` | ✅ 可用 | 主题隔离 JSON 存储 |
+| 集中配置 | `src/utils/config.py` + `config.yaml` | ✅ 已完成 | Pydantic Settings，默认 prompt_mode: split |
+| 日志系统 | `src/utils/logger.py` | ✅ 已完成 | 四级日志、按日期轮转落盘 |
+| 错误处理 | `src/llm/exceptions.py` + 各处 try-except | ✅ 已完成 | 用户友好提示 + 自动保存进度 |
+| Onboarding | `main.py` + `00_onboarding.md` | ✅ 已跑通 | 自动摸底，判定水平 |
+| 进度恢复 | `main.py` | ✅ 已可用 | 数字选择恢复 / `new` 创建新主题 |
+| 历史持久化 | `main.py` `_save_progress()` | ✅ 已可用 | 保存 `state.json` + `history.json` |
+| 单元测试 | `tests/unit/` × 7 文件 | ✅ 本地 102/102 通过 | translator/memory/rewards/config/file_loader/storage/main flow |
+| Agent Skill | `skills/heuristic-teacher/SKILL.md` | ✅ 已建立 | 独立于产品文档，包含工作流与验证标准 |
+| CI | `.github/workflows/tests.yml` | 🔨 已配置 | 等待推送到 GitHub 后验证 Actions 绿灯 |
+
+---
+
+## 三、发布前待办（P0 — 本周完成即可发 GitHub）
+
+| # | 任务 | 影响 | 预估耗时 |
+|---|------|------|---------|
+| 1 | **GitHub Actions 跑绿** | 发布前自动验证单测 | 待推送后确认 |
+| 2 | **更新 changelog 发布记录** | 记录结构整理、CI、主流程修复 | ✅ 已完成 |
+| 3 | **确认发布包不含本地数据** | 避免提交 `.env`、logs、data、cache | ✅ 已确认 `.gitignore` 保护 |
+| 4 | **配置说明校准** | `.env.example` 与 `config.yaml` 的模型配置关系需一致 | 10 min |
+
+---
+
+## 四、后续版本路线图
+
+| 版本 | 目标 | 内容 | 状态 |
+|------|------|------|------|
+| **v0.2.0** | GitHub 首发 | 上述 4 项清理 + 打 tag | 🔨 本周可做 |
+| **v0.3.0** | 教学风格 | Persona 体系（严师/良师/苏格拉底/Peer） | ⏳ 待开始 |
+| **v0.4.0** | 复习模式 | 自然语言触发复习、跳过讲解直接提问、薄弱点优先 | ⏳ 待开始 |
+| **v1.0.0** | Skill 体系 | Skill 保存/分享、Claude Code Skill 化 | ⏳ 待开始 |
+
+---
+
+## 五、快速验证
+
+```bash
+# 单元测试（无需 API Key，CI 可用；2026-05-02 本地 102/102 通过）
+pytest tests/unit/
+
+# 端到端测试（需要 API Key）
+python tests/integration/test_e2e.py
+
+# 直接运行主程序
+python main.py
+```
+
+---
+
+## 六、Sprint 进度
+
+| Sprint | 内容 | 状态 |
+|--------|------|------|
+| Sprint 1 | 工程基建（日志、配置、错误处理）| ✅ 已完成 |
+| Sprint 2 | 输入扩展（文件读取、PDF）+ 单元测试 | ✅ 已完成 |
+| Sprint 3 | Prompt 拆分 + 教学风格 | ✅ Prompt 拆分已完成，Persona 待做 |
