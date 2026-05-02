@@ -1,5 +1,7 @@
 # Teacher-skill
 
+[![Tests](https://github.com/baichou6320-cpu/Teacher-skill/actions/workflows/tests.yml/badge.svg)](https://github.com/baichou6320-cpu/Teacher-skill/actions/workflows/tests.yml)
+
 启发式数字助教 CLI，通过「讲解 -> 提问 -> 反馈」闭环帮助用户避免“理解幻觉”。
 
 ```text
@@ -7,6 +9,8 @@
 ```
 
 ## Quick Start
+
+需要 Python 3.11+。
 
 ```bash
 cp .env.example .env
@@ -21,6 +25,8 @@ python main.py
 ```bash
 python main.py --file article.md
 ```
+
+模型和生成参数在 `config.yaml` 中配置；`.env` 只用于 API Key 和可选的 `ANTHROPIC_BASE_URL`。
 
 ## Commands
 
@@ -39,6 +45,7 @@ python main.py --file article.md
 
 ## Documentation
 
+- [安装和配置](docs/install/README.md)
 - [项目总览](docs/product/project-overview.md)
 - [PRD](docs/product/PRD.md)
 - [路线图](docs/product/roadmap.md)
@@ -47,7 +54,6 @@ python main.py --file article.md
 - [变更日志](docs/development/changelog.md)
 - [复习模式设计](docs/product/review-mode.md)
 - [学习笔记](docs/learning-notes/README.md)
-- [安装说明](docs/install/README.md)
 
 ## Verification
 

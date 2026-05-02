@@ -1,7 +1,7 @@
 # 项目状态总览
 
 > **更新日期**：2026-05-02
-> **当前阶段**：Phase 2 核心任务 ✅ 已完成（本地单元测试 102/102 通过）
+> **当前阶段**：v0.2.0 GitHub 首发准备完成（本地单元测试 102/102 通过，GitHub Actions 通过）
 > **阅读建议**：每天开工前看一遍，确认今天要修哪个模块
 
 ---
@@ -21,8 +21,9 @@
 - 单元测试 102 个，无需 API Key 即可运行，本地已通过 ✅
 - 标准 Agent Skill 结构已建立：`skills/heuristic-teacher/SKILL.md` ✅
 - README 已精简为项目入口，文档已按 product/development/learning-notes/install 分区 ✅
-- GitHub Actions 单测工作流已添加，等待推送后验证 ✅
+- GitHub Actions 单测工作流已通过 ✅
 - `.env.example` 与 `config.yaml` 配置说明已校准：API Key/base_url 在 `.env`，模型参数在 `config.yaml` ✅
+- 安装和配置文档已完善：`docs/install/README.md` ✅
 
 **结论：Phase 2 核心教学闭环 + 工程基建已可用。**
 
@@ -47,7 +48,7 @@
 | 历史持久化 | `main.py` `_save_progress()` | ✅ 已可用 | 保存 `state.json` + `history.json` |
 | 单元测试 | `tests/unit/` × 7 文件 | ✅ 本地 102/102 通过 | translator/memory/rewards/config/file_loader/storage/main flow |
 | Agent Skill | `skills/heuristic-teacher/SKILL.md` | ✅ 已建立 | 独立于产品文档，包含工作流与验证标准 |
-| CI | `.github/workflows/tests.yml` | 🔨 已配置 | 等待推送到 GitHub 后验证 Actions 绿灯 |
+| CI | `.github/workflows/tests.yml` | ✅ 通过 | GitHub Actions `Tests` workflow 已跑绿 |
 
 ---
 
@@ -55,7 +56,7 @@
 
 | # | 任务 | 影响 | 预估耗时 |
 |---|------|------|---------|
-| 1 | **GitHub Actions 跑绿** | 发布前自动验证单测 | 待推送后确认 |
+| 1 | **GitHub Actions 跑绿** | 发布前自动验证单测 | ✅ 已通过 |
 | 2 | **更新 changelog 发布记录** | 记录结构整理、CI、主流程修复 | ✅ 已完成 |
 | 3 | **确认发布包不含本地数据** | 避免提交 `.env`、logs、data、cache | ✅ 已确认 `.gitignore` 保护 |
 | 4 | **配置说明校准** | `.env.example` 与 `config.yaml` 的模型配置关系需一致 | ✅ 已完成 |
@@ -66,7 +67,7 @@
 
 | 版本 | 目标 | 内容 | 状态 |
 |------|------|------|------|
-| **v0.2.0** | GitHub 首发 | 上述 4 项清理 + 打 tag | 🔨 本周可做 |
+| **v0.2.0** | GitHub 首发 | README、安装文档、Skill 结构、CI、发布清单已完成 | ✅ 可发布 |
 | **v0.3.0** | 教学风格 | Persona 体系（严师/良师/苏格拉底/Peer） | ⏳ 待开始 |
 | **v0.4.0** | 复习模式 | 自然语言触发复习、跳过讲解直接提问、薄弱点优先 | ⏳ 待开始 |
 | **v1.0.0** | Skill 体系 | Skill 保存/分享、Claude Code Skill 化 | ⏳ 待开始 |

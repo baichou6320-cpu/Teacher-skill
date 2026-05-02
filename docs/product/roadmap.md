@@ -1,13 +1,13 @@
 # 版本路线图
 
-> **当前版本**：v0.2.0-dev（Phase 2 核心已完成，准备 GitHub 首发）
-> **更新日期**：2026-04-29
+> **当前版本**：v0.2.0-ready（Phase 2 核心已完成，GitHub 首发准备完成）
+> **更新日期**：2026-05-02
 
 ---
 
-## v0.2.0 — GitHub 首发（本周）
+## v0.2.0 — GitHub 首发
 
-**目标**：功能已完备，做发布前的清理与文档同步。
+**目标**：功能已完备，完成发布前清理、文档同步和 CI 验证。
 
 ### 发布 Checklist
 
@@ -15,11 +15,14 @@
 - [x] 工程基建（日志、配置、错误处理）
 - [x] 文件输入（.md/.txt/.pdf）
 - [x] Prompt 分层架构（split/merged 双模式）
-- [x] 单元测试 99 个全部通过
+- [x] 单元测试 102 个全部通过
 - [x] LICENSE（MIT）
 - [x] tests/ 目录整理（unit / integration 分离）
-- [x] README 结构图同步
+- [x] README 精简为项目入口
 - [x] 状态文档同步
+- [x] 标准 Agent Skill 结构：`skills/heuristic-teacher/SKILL.md`
+- [x] 安装文档：`docs/install/README.md`
+- [x] GitHub Actions 单测工作流通过
 
 **验收**：clone → `pip install -r requirements.txt` → `pytest tests/unit/` 全绿 → `python main.py` 能跑。
 

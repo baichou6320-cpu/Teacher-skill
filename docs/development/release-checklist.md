@@ -5,10 +5,10 @@ Use this checklist before publishing a GitHub release or sharing a packaged copy
 ## Required
 
 - [x] `pytest tests/unit/` passes locally after adding main.py flow tests.
-- [ ] GitHub Actions unit-test workflow passes.
+- [x] GitHub Actions unit-test workflow passes.
 - [x] `README.md` links point to current paths.
 - [x] `docs/development/status.md` reflects the current release state.
-- [ ] `docs/product/roadmap.md` reflects what is complete and what is next.
+- [x] `docs/product/roadmap.md` reflects what is complete and what is next.
 - [x] `docs/development/changelog.md` has a release entry.
 - [x] `skills/heuristic-teacher/SKILL.md` describes the stable Agent Skill workflow.
 - [x] `skills/heuristic-teacher/references/` contains supporting verification notes.
