@@ -34,6 +34,14 @@
 - 重整文档目录为 `docs/product/`、`docs/development/`、`docs/learning-notes/`、`docs/install/`。
 - 新增发布检查清单：`docs/development/release-checklist.md`。
 
+**体验**
+- 推荐 `python main.py --file <路径>` 作为主要学习入口。
+- 新主题输入阶段支持 `/load <路径>` 加载文件，不再默认要求粘贴文本后输入 `/done`。
+- 多行粘贴改为显式 `/paste` 模式，降低普通输入时的困惑。
+- 学习过程中支持 `/load <路径>` 追加材料，新材料会分析成新的知识点并追加到当前 topic。
+- 新增学习控制命令：`/skip`、`/back`、`/list`、`/jump N`、`/review`。
+- 强化 `/progress`，显示已掌握、待巩固、未开始、作答次数和答错次数。
+
 ---
 
 ## 2026-04-20 — 文档体系重建

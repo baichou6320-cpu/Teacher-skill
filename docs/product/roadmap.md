@@ -28,30 +28,29 @@
 
 ---
 
-## v0.3.0 — 教学风格 Persona（预计 1 周）
+## v0.3.0 — CLI 可用性修复（预计 1 周）
 
-**目标**：让教学从"千篇一律"变成"因人而异"。
+**目标**：让用户在 CLI 中也有控制感，减少输入和学习过程中的挫败感。
 
 ### 任务
 
 | # | 任务 | 文件 | 备注 |
 |---|------|------|------|
-| C1 | 创建 `models/persona.py` | `TeachingPersona` Pydantic 模型 | 定义风格字段 |
-| C2 | 创建 `prompts/personas/` 目录 | 4 个风格文件 | strict / gentle / socratic / peer |
-| C3 | onboarding 增加风格选择 | `main.py` + `00_onboarding.md` | 用户首次使用时选择 |
-| C4 | 保存 preferred_persona 到 profile | `models/user.py` + `storage.py` | 持久化 |
-| C5 | Engine 动态拼接 persona prompt | `engine.py` `_get_system_prompt()` | 根据用户选择加载对应 persona |
+| C1 | 推荐 `--file` 作为主要入口 | `README.md` / `main.py` | ✅ 已完成 |
+| C2 | 新主题阶段支持 `/load <路径>` | `main.py` | ✅ 已完成 |
+| C3 | 多行粘贴改为显式 `/paste` | `main.py` | ✅ 已完成 |
+| C4 | 学习中支持 `/load <路径>` 追加材料 | `main.py` / `engine.py` | ✅ 已完成 |
+| C5 | 增加学习控制命令 | `main.py` / `engine.py` | `/skip`、`/back`、`/list`、`/jump N`、`/review`，✅ 已完成 |
+| C6 | 强化 `/progress` | `main.py` | 显示掌握、待巩固、未开始、作答统计，✅ 已完成 |
+| C7 | topic 可读标题 | `models/state.py` / `storage.py` / `main.py` | 待开始 |
+| C8 | 答案提交确认 | `main.py` | 待开始 |
+| C9 | 错误反馈情绪优化 | `engine.py` / prompt | 待开始 |
 
-**风格预览**：
-
-| ID | 名称 | 特点 |
-|----|------|------|
-| `strict_teacher` | 严师模式 | 要求高，追问到底，鼓励少 |
-| `gentle_mentor` | 良师模式 | 耐心引导，多鼓励，默认 |
-| `socratic_guide` | 苏格拉底 | 不直接给答案，只用反问 |
-| `peer_tutor` | Peer 模式 | 像同学一样平等讨论 |
-
-**验收**：选择"严师"后，AI 语气明显更严厉；选择"苏格拉底"后，从不直接给答案。
+**验收**：
+1. 用户可以用 `python main.py --file article.md` 直接开始学习
+2. 用户可以在新主题和学习过程中使用 `/load <路径>`
+3. 用户可以使用 `/skip`、`/back`、`/list`、`/jump N`、`/review` 控制学习流程
+4. `/progress` 不只是显示 `3/7`，还显示掌握、待巩固和答题统计
 
 ---
 
@@ -74,6 +73,33 @@
 2. 复习模式跳过讲解，直接进入提问
 3. 优先提问 `needs_review` 和 `fail_count > 0` 的 chunk
 4. 复习完成后更新 `profile.json` 的 `history_topics`
+
+---
+
+## v0.5.0 — 教学风格 Persona（预计 1 周）
+
+**目标**：让教学从"千篇一律"变成"因人而异"。
+
+### 任务
+
+| # | 任务 | 文件 | 备注 |
+|---|------|------|------|
+| E1 | 创建 `models/persona.py` | `TeachingPersona` Pydantic 模型 | 定义风格字段 |
+| E2 | 创建 `prompts/personas/` 目录 | 4 个风格文件 | strict / gentle / socratic / peer |
+| E3 | onboarding 增加风格选择 | `main.py` + `00_onboarding.md` | 用户首次使用时选择 |
+| E4 | 保存 preferred_persona 到 profile | `models/user.py` + `storage.py` | 持久化 |
+| E5 | Engine 动态拼接 persona prompt | `engine.py` `_get_system_prompt()` | 根据用户选择加载对应 persona |
+
+**风格预览**：
+
+| ID | 名称 | 特点 |
+|----|------|------|
+| `strict_teacher` | 严师模式 | 要求高，追问到底，鼓励少 |
+| `gentle_mentor` | 良师模式 | 耐心引导，多鼓励，默认 |
+| `socratic_guide` | 苏格拉底 | 不直接给答案，只用反问 |
+| `peer_tutor` | Peer 模式 | 像同学一样平等讨论 |
+
+**验收**：选择"严师"后，AI 语气明显更严厉；选择"苏格拉底"后，从不直接给答案。
 
 ---
 

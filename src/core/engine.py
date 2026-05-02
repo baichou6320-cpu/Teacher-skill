@@ -189,11 +189,8 @@ class TutorEngine:
 
     # ─── Material Analysis ───
 
-    def analyze_material(self, material: str, user_level: str = "beginner") -> TopicState:
-        """Analyse learning material and break it into knowledge chunks."""
-        self.logger.info(f"State: {self.state.value} -> ANALYZING, user_level={user_level}")
-        self.state = TutorState.ANALYZING
-
+    def _request_material_analysis(self, material: str, user_level: str) -> dict:
+        """Ask the LLM to analyze material and return parsed chunk data."""
         prompt = LLMClient.interpolate(
             self._get_system_prompt("analyzer"),
             {"material": material, "user_level": user_level},
@@ -207,12 +204,23 @@ class TutorEngine:
         if not parsed:
             self.logger.error("Material analysis parsing failed")
             raise ValueError("材料分析失败，无法解析 LLM 响应")
+        return parsed
 
-        self.logger.info(f"Material parsed into {len(parsed.get('chunks', []))} chunks")
+    def _build_chunks(
+        self,
+        parsed: dict,
+        start_index: int = 0,
+        preserve_chunk_ids: bool = True,
+    ) -> list[ChunkState]:
+        """Build ChunkState objects from parsed material analysis."""
         chunks = []
+        self.logger.info(f"Material parsed into {len(parsed.get('chunks', []))} chunks")
         for i, chunk_data in enumerate(parsed.get("chunks", [])):
+            chunk_id = chunk_data.get("chunk_id")
+            if not preserve_chunk_ids or not chunk_id:
+                chunk_id = f"{self.topic_id}_chunk_{start_index + i}"
             chunk = ChunkState(
-                chunk_id=chunk_data.get("chunk_id", f"{self.topic_id}_chunk_{i}"),
+                chunk_id=chunk_id,
                 title=chunk_data.get("title", ""),
                 content=chunk_data.get("content", ""),
                 question=chunk_data.get("question", ""),
@@ -222,6 +230,15 @@ class TutorEngine:
                 difficulty=chunk_data.get("difficulty", "medium"),
             )
             chunks.append(chunk)
+        return chunks
+
+    def analyze_material(self, material: str, user_level: str = "beginner") -> TopicState:
+        """Analyse learning material and break it into knowledge chunks."""
+        self.logger.info(f"State: {self.state.value} -> ANALYZING, user_level={user_level}")
+        self.state = TutorState.ANALYZING
+
+        parsed = self._request_material_analysis(material, user_level)
+        chunks = self._build_chunks(parsed)
 
         self.topic_state = TopicState(
             topic_id=self.topic_id,
@@ -230,6 +247,49 @@ class TutorEngine:
             chunks=chunks,
         )
         return self.topic_state
+
+    def append_material(self, material: str, user_level: str = "beginner") -> list[ChunkState]:
+        """Analyze additional material and append its chunks to the active topic."""
+        if not self.topic_state:
+            raise ValueError("Topic state not initialized")
+
+        previous_state = self.state
+        previous_total = self.topic_state.total_chunks
+        self.logger.info(
+            f"Appending material to {self.topic_id}, previous_total={previous_total}, "
+            f"user_level={user_level}"
+        )
+        self.state = TutorState.ANALYZING
+
+        try:
+            parsed = self._request_material_analysis(material, user_level)
+            new_chunks = self._build_chunks(
+                parsed,
+                start_index=previous_total,
+                preserve_chunk_ids=False,
+            )
+        except Exception:
+            self.state = previous_state
+            raise
+        if not new_chunks:
+            self.logger.warning("Append material produced no chunks")
+            self.state = previous_state
+            return []
+
+        self.topic_state.chunks.extend(new_chunks)
+        self.topic_state.total_chunks = len(self.topic_state.chunks)
+        self.topic_state.updated_at = datetime.now()
+
+        if self.topic_state.is_completed:
+            self.topic_state.is_completed = False
+            self.topic_state.current_chunk_index = previous_total
+
+        self.memory.add_user_message(f"/load 追加材料（{len(material)} 字符）")
+        self.logger.info(
+            f"Appended {len(new_chunks)} chunks, total={self.topic_state.total_chunks}"
+        )
+        self.state = previous_state
+        return new_chunks
 
     # ─── Teaching Loop ───
 
@@ -425,6 +485,7 @@ class TutorEngine:
             raise ValueError("Topic state not initialized")
 
         self.topic_state.current_chunk_index += 1
+        self.topic_state.updated_at = datetime.now()
         self.logger.info(f"Advanced to chunk {self.topic_state.current_chunk_index + 1}/{self.topic_state.total_chunks}")
 
         if self.topic_state.current_chunk_index >= self.topic_state.total_chunks:
@@ -437,6 +498,60 @@ class TutorEngine:
                 is_final=True,
             )
 
+        self.state = TutorState.TEACHING
+        return self._teach_current_chunk()
+
+    def skip_current_chunk(self) -> AIMessage:
+        """Skip the current chunk and mark it as needing review."""
+        if not self.topic_state:
+            raise ValueError("Topic state not initialized")
+
+        idx = self.topic_state.current_chunk_index
+        if idx < self.topic_state.total_chunks:
+            chunk = self.topic_state.chunks[idx]
+            if chunk.status != LearningStatus.MASTERED:
+                chunk.status = LearningStatus.NEEDS_REVIEW
+            self.memory.add_user_message("/skip")
+            self.logger.info(f"Skipped chunk {idx + 1}/{self.topic_state.total_chunks}")
+
+        return self.next_chunk()
+
+    def previous_chunk(self) -> AIMessage:
+        """Move back to the previous chunk and teach it again."""
+        if not self.topic_state:
+            raise ValueError("Topic state not initialized")
+
+        if self.topic_state.current_chunk_index <= 0:
+            return AIMessage(
+                response_type=ResponseType.EXPLANATION,
+                content="已经是第一个知识点，不能再往前了。",
+            )
+
+        self.topic_state.current_chunk_index -= 1
+        self.topic_state.is_completed = False
+        self.topic_state.updated_at = datetime.now()
+        self.memory.add_user_message("/back")
+        self.logger.info(
+            f"Moved back to chunk {self.topic_state.current_chunk_index + 1}/"
+            f"{self.topic_state.total_chunks}"
+        )
+        self.state = TutorState.TEACHING
+        return self._teach_current_chunk()
+
+    def jump_to_chunk(self, chunk_number: int) -> AIMessage:
+        """Jump to a 1-based chunk number and teach it again."""
+        if not self.topic_state:
+            raise ValueError("Topic state not initialized")
+        if chunk_number < 1 or chunk_number > self.topic_state.total_chunks:
+            raise ValueError(
+                f"知识点编号必须在 1 到 {self.topic_state.total_chunks} 之间"
+            )
+
+        self.topic_state.current_chunk_index = chunk_number - 1
+        self.topic_state.is_completed = False
+        self.topic_state.updated_at = datetime.now()
+        self.memory.add_user_message(f"/jump {chunk_number}")
+        self.logger.info(f"Jumped to chunk {chunk_number}/{self.topic_state.total_chunks}")
         self.state = TutorState.TEACHING
         return self._teach_current_chunk()
 

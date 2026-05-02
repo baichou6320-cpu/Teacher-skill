@@ -17,13 +17,13 @@ cp .env.example .env
 # 编辑 .env，填入 ANTHROPIC_API_KEY
 
 pip install -r requirements.txt
-python main.py
+python main.py --file article.md
 ```
 
-从文件加载材料：
+也可以进入交互模式后用 `/load` 加载材料：
 
 ```bash
-python main.py --file article.md
+python main.py
 ```
 
 模型和生成参数在 `config.yaml` 中配置；`.env` 只用于 API Key 和可选的 `ANTHROPIC_BASE_URL`。
@@ -31,8 +31,14 @@ python main.py --file article.md
 ## Commands
 
 - `/help` — 查看帮助
-- `/progress` — 查看当前进度
+- `/progress` — 查看当前进度、掌握数、待巩固数和答题统计
+- `/list` — 查看全部知识点
+- `/review` — 查看待巩固知识点
+- `/skip` — 跳过当前知识点，并标记为待巩固
+- `/back` — 回到上一个知识点
+- `/jump N` — 跳到第 N 个知识点，例如 `/jump 3`
 - `/direct` — 直接查看答案，并标记当前知识点为待巩固
+- `/load <路径>` — 加载 `.md` / `.txt` / `.pdf`；学习中使用会追加为新的知识点
 - `/exit` — 保存进度并退出
 
 ## Agent Skill

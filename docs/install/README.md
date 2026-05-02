@@ -84,16 +84,16 @@ llm:
 
 ## Run
 
+Recommended file-based mode:
+
+```bash
+python main.py --file tests/integration/sample_article.md
+```
+
 Interactive mode:
 
 ```bash
 python main.py
-```
-
-Load material from file:
-
-```bash
-python main.py --file tests/integration/sample_article.md
 ```
 
 Supported file types:
@@ -101,6 +101,18 @@ Supported file types:
 - `.md`
 - `.txt`
 - `.pdf`
+
+In interactive mode, use `/load <path>` to load a file. During learning, the same
+command appends the file as additional knowledge points in the current topic.
+
+Useful learning commands:
+
+- `/progress` shows progress, mastered items, review items, and answer stats.
+- `/list` shows all knowledge points.
+- `/review` shows weak or review-needed knowledge points.
+- `/skip` skips the current point and marks it as needing review.
+- `/back` returns to the previous point.
+- `/jump N` jumps to a specific point, for example `/jump 3`.
 
 ## Verify
 

@@ -27,7 +27,7 @@ from src.utils.logger import get_logger
 from src.core.memory import ConversationMemory
 from src.utils.storage import TopicStorage
 from models.protocol import AIMessage, ResponseType
-from models.state import TopicState, LearningStatus
+from models.state import ChunkState, TopicState, LearningStatus
 from models.user import UserProfile
 
 
@@ -43,6 +43,7 @@ class TeacherSkillApp:
         self.user_id = cfg.app.user_id
         self.storage = TopicStorage(self.user_id)
         self.current_engine: TutorEngine | None = None
+        self.user_level = "beginner"
         self._llm_available = self._check_llm()
         self.logger = get_logger("main")
 
@@ -62,6 +63,7 @@ class TeacherSkillApp:
                 "[bold cyan]🎓 Teacher-skill 数字助教[/bold cyan]\n\n"
                 "[yellow]启发式学习循环：[/yellow]\n"
                 "讲解 → 提问 → 反馈 → 循环\n\n"
+                "[dim]推荐入口：python main.py --file article.md[/dim]\n"
                 "[dim]输入 /help 查看帮助[/dim]",
                 border_style="cyan",
             )
@@ -87,6 +89,7 @@ class TeacherSkillApp:
                 return
 
             user_level = self._run_onboarding()
+            self.user_level = user_level
 
             if file_path:
                 self._start_new_topic(user_level, file_path=file_path)
@@ -215,28 +218,9 @@ class TeacherSkillApp:
             if material is None:
                 return
         else:
-            console.print(
-                "[cyan]请输入你要学习的内容（可以是文本段落或主题描述）：[/cyan]"
-            )
-            console.print(
-                "[dim]输入 /load <文件路径> 加载 .md/.txt/.pdf，"
-                "或直接粘贴文本，输入 /done 结束[/dim]\n"
-            )
-
-            first_line = input().strip()
-            if first_line.startswith("/load "):
-                path = first_line[6:].strip().strip('"').strip("'")
-                material = self._load_material_from_file(path)
-                if material is None:
-                    return
-            else:
-                lines = [first_line]
-                while True:
-                    line = input()
-                    if line.strip() == "/done":
-                        break
-                    lines.append(line)
-                material = "\n".join(lines).strip()
+            material = self._collect_material_interactively()
+            if material is None:
+                return
 
         if not material:
             console.print("[yellow]未输入内容，退出[/yellow]")
@@ -277,6 +261,125 @@ class TeacherSkillApp:
             console.print(f"[red]加载文件失败: {exc}[/red]")
             return None
 
+    def _parse_load_command(self, user_input: str) -> str | None:
+        """Return the path from a /load command, or None if it is not /load."""
+        parts = user_input.strip().split(maxsplit=1)
+        if not parts or parts[0].lower() != "/load":
+            return None
+        if len(parts) == 1:
+            return ""
+        return parts[1].strip().strip('"').strip("'")
+
+    def _collect_material_interactively(self) -> str | None:
+        """Collect material for a new topic without forcing /done by default."""
+        console.print("[cyan]请选择学习材料来源：[/cyan]")
+        console.print("[bold]推荐：[/bold]先把材料保存成文件，然后运行：")
+        console.print("  [green]python main.py --file article.md[/green]\n")
+        console.print(
+            "[dim]当前也可以输入 /load <文件路径> 加载 .md/.txt/.pdf；"
+            "直接输入一段文字会立即开始分析。[/dim]"
+        )
+        console.print(
+            "[dim]只有在需要粘贴多行文本时，才输入 /paste 进入多行模式，"
+            "再用 /done 结束。[/dim]\n"
+        )
+
+        while True:
+            user_input = console.input("[bold blue材料>[/bold blue] ").strip()
+            if not user_input:
+                continue
+
+            load_path = self._parse_load_command(user_input)
+            if load_path is not None:
+                if not load_path:
+                    console.print("[yellow]用法：/load <文件路径>[/yellow]")
+                    continue
+                material = self._load_material_from_file(load_path)
+                if material is None:
+                    continue
+                return material
+
+            lowered = user_input.lower()
+            if lowered in ("/exit", "/quit", "exit", "quit"):
+                console.print("[cyan]已取消新主题创建[/cyan]")
+                return None
+
+            if lowered == "/paste":
+                return self._read_multiline_material()
+
+            if lowered == "/done":
+                console.print("[yellow]现在不需要先输入 /done。请先输入材料，或使用 /load <文件路径>。[/yellow]")
+                continue
+
+            console.print(
+                f"[dim]已收到单行材料 ({len(user_input)} 字符)。"
+                "长文档推荐使用 --file 或 /load。[/dim]\n"
+            )
+            return user_input
+
+    def _read_multiline_material(self) -> str | None:
+        """Read multiline pasted material until /done."""
+        console.print("[cyan]进入多行粘贴模式。粘贴完成后单独输入 /done。[/cyan]")
+        console.print("[dim]输入 /cancel 可取消本次输入。[/dim]\n")
+
+        lines: list[str] = []
+        while True:
+            line = input()
+            command = line.strip().lower()
+            if command == "/done":
+                material = "\n".join(lines).strip()
+                if not material:
+                    console.print("[yellow]没有收到任何材料[/yellow]")
+                    return None
+                return material
+            if command == "/cancel":
+                console.print("[cyan]已取消多行输入[/cyan]")
+                return None
+            lines.append(line)
+
+    def _append_material_from_file(self, file_path: str) -> bool:
+        """Load a file and append its analyzed chunks to the current topic."""
+        material = self._load_material_from_file(file_path)
+        if material is None:
+            return False
+        return self._append_material(material, source_label=file_path)
+
+    def _append_material(self, material: str, source_label: str = "手动输入") -> bool:
+        """Append material to the current topic without interrupting the current question."""
+        if not self.current_engine or not self.current_engine.topic_state:
+            console.print("[yellow]当前没有进行中的主题，无法追加材料[/yellow]")
+            return False
+
+        previous_total = self.current_engine.topic_state.total_chunks
+        console.print(
+            f"\n[dim]正在追加材料：{source_label} ({len(material)} 字符)...[/dim]\n"
+        )
+
+        try:
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=console,
+            ) as progress:
+                progress.add_task("[cyan]正在分析追加材料...", total=None)
+                new_chunks = self.current_engine.append_material(
+                    material,
+                    user_level=getattr(self, "user_level", "beginner"),
+                )
+        except Exception as exc:
+            self.logger.error(f"Append material failed: {exc}")
+            console.print(f"[red]追加材料失败: {exc}[/red]")
+            console.print("[dim]当前题目没有被修改，可以继续作答。[/dim]")
+            return False
+
+        if not new_chunks:
+            console.print("[yellow]追加材料没有产生新的知识点[/yellow]")
+            return False
+
+        self._show_append_result(new_chunks, previous_total, source_label)
+        self._save_progress()
+        return True
+
     # ─── Learning Loop ───
 
     def _learning_loop(self, topic_state: TopicState) -> None:
@@ -314,6 +417,35 @@ class TeacherSkillApp:
                 self._show_progress()
                 continue
 
+            if user_input.lower() == "/skip":
+                if self._handle_skip():
+                    self.logger.info("Learning loop completed")
+                    break
+                continue
+
+            if user_input.lower() == "/back":
+                self._handle_back()
+                continue
+
+            if user_input.lower() == "/list":
+                self._show_chunk_list()
+                continue
+
+            if user_input.lower() == "/review":
+                self._show_review_items()
+                continue
+
+            if self._handle_jump_command(user_input):
+                continue
+
+            load_path = self._parse_load_command(user_input)
+            if load_path is not None:
+                if not load_path:
+                    console.print("[yellow]用法：/load <文件路径>[/yellow]")
+                    continue
+                self._append_material_from_file(load_path)
+                continue
+
             # Normal answer
             self.logger.debug(f"User answer: {user_input[:50]}...")
             response = self.current_engine.receive_answer(user_input, is_direct=False)
@@ -339,6 +471,55 @@ class TeacherSkillApp:
             return True
         self._display_response(response)
         return False
+
+    def _handle_skip(self) -> bool:
+        """Skip the current chunk and continue or finish."""
+        if not self.current_engine or not self.current_engine.topic_state:
+            console.print("[yellow]当前没有进行中的学习主题[/yellow]")
+            return False
+
+        response = self.current_engine.skip_current_chunk()
+        self._display_response(response)
+        self._save_progress()
+        return response.is_final
+
+    def _handle_back(self) -> None:
+        """Move back to the previous chunk."""
+        if not self.current_engine or not self.current_engine.topic_state:
+            console.print("[yellow]当前没有进行中的学习主题[/yellow]")
+            return
+
+        response = self.current_engine.previous_chunk()
+        self._display_response(response)
+        self._save_progress()
+
+    def _handle_jump_command(self, user_input: str) -> bool:
+        """Handle /jump commands.
+
+        Returns True when the input was a /jump command, even if invalid.
+        """
+        parts = user_input.strip().split(maxsplit=1)
+        if not parts or parts[0].lower() != "/jump":
+            return False
+
+        if len(parts) != 2 or not parts[1].strip().isdigit():
+            console.print("[yellow]用法：/jump <知识点编号>，例如 /jump 3[/yellow]")
+            return True
+
+        if not self.current_engine or not self.current_engine.topic_state:
+            console.print("[yellow]当前没有进行中的学习主题[/yellow]")
+            return True
+
+        chunk_number = int(parts[1].strip())
+        try:
+            response = self.current_engine.jump_to_chunk(chunk_number)
+        except ValueError as exc:
+            console.print(f"[yellow]{exc}[/yellow]")
+            return True
+
+        self._display_response(response)
+        self._save_progress()
+        return True
 
     # ─── Display ───
 
@@ -391,20 +572,136 @@ class TeacherSkillApp:
         console.print(table)
         console.print()
 
+    def _show_append_result(
+        self,
+        new_chunks: list[ChunkState],
+        previous_total: int,
+        source_label: str,
+    ) -> None:
+        """Display appended chunks and make it clear the current question continues."""
+        console.print(
+            Panel.fit(
+                f"[bold green]✅ 已追加材料[/bold green]\n\n"
+                f"来源：{source_label}\n"
+                f"新增知识点：{len(new_chunks)} 个\n"
+                f"当前主题总知识点：{previous_total + len(new_chunks)} 个\n\n"
+                "[dim]当前题目不会被打断，答完后会继续进入后续知识点。[/dim]",
+                border_style="green",
+            )
+        )
+
+        table = Table(title="📚 新增知识卡片")
+        table.add_column("序号", style="cyan", width=4)
+        table.add_column("标题", style="white")
+        table.add_column("难度", style="yellow", width=8)
+
+        for i, chunk in enumerate(new_chunks, previous_total + 1):
+            table.add_row(str(i), chunk.title or "未命名", chunk.difficulty)
+
+        console.print(table)
+        console.print()
+
     def _show_progress(self) -> None:
         """Display current learning progress."""
         if not self.current_engine or not self.current_engine.topic_state:
             return
 
         ts = self.current_engine.topic_state
+        mastered = sum(1 for c in ts.chunks if c.status == LearningStatus.MASTERED)
+        needs_review = sum(1 for c in ts.chunks if c.status == LearningStatus.NEEDS_REVIEW)
+        not_started = sum(1 for c in ts.chunks if c.status == LearningStatus.NOT_STARTED)
+        attempts = sum(c.attempts for c in ts.chunks)
+        wrong = sum(c.fail_count for c in ts.chunks)
+        current = ts.chunks[ts.current_chunk_index] if ts.chunks and ts.current_chunk_index < len(ts.chunks) else None
         console.print(
             Panel.fit(
                 f"[bold]当前进度[/bold]\n\n"
                 f"知识点: {ts.current_chunk_index + 1}/{ts.total_chunks}\n"
+                f"当前: {current.title if current else '无'}\n"
+                f"已掌握: [green]{mastered}[/green]\n"
+                f"待巩固: [yellow]{needs_review}[/yellow]\n"
+                f"未开始: {not_started}\n"
+                f"本主题作答: {attempts} 次，答错: {wrong} 次\n"
                 f"状态: {ts.is_completed and '已完成' or '进行中'}",
                 border_style="cyan",
             )
         )
+
+    def _format_chunk_status(self, chunk: ChunkState) -> str:
+        """Return a human-readable learning status."""
+        status_map = {
+            LearningStatus.NOT_STARTED: "未开始",
+            LearningStatus.IN_PROGRESS: "学习中",
+            LearningStatus.MASTERED: "已掌握",
+            LearningStatus.NEEDS_REVIEW: "待巩固",
+        }
+        return status_map.get(chunk.status, str(chunk.status))
+
+    def _show_chunk_list(self) -> None:
+        """Display all chunks in the current topic."""
+        if not self.current_engine or not self.current_engine.topic_state:
+            console.print("[yellow]当前没有进行中的学习主题[/yellow]")
+            return
+
+        ts = self.current_engine.topic_state
+        table = Table(title="📚 知识点列表")
+        table.add_column("当前", width=4)
+        table.add_column("序号", style="cyan", width=4)
+        table.add_column("标题", style="white")
+        table.add_column("状态", style="yellow", width=8)
+        table.add_column("答错", width=6)
+        table.add_column("提示", width=6)
+
+        for i, chunk in enumerate(ts.chunks, 1):
+            table.add_row(
+                "→" if i - 1 == ts.current_chunk_index else "",
+                str(i),
+                chunk.title or "未命名",
+                self._format_chunk_status(chunk),
+                str(chunk.fail_count),
+                str(chunk.hint_level),
+            )
+
+        console.print(table)
+        console.print("[dim]可用 /jump <序号> 跳转到指定知识点。[/dim]")
+
+    def _show_review_items(self) -> None:
+        """Display chunks that need review."""
+        if not self.current_engine or not self.current_engine.topic_state:
+            console.print("[yellow]当前没有进行中的学习主题[/yellow]")
+            return
+
+        ts = self.current_engine.topic_state
+        review_items = [
+            (i, chunk)
+            for i, chunk in enumerate(ts.chunks, 1)
+            if chunk.status == LearningStatus.NEEDS_REVIEW
+            or chunk.fail_count > 0
+            or chunk.hint_level > 0
+        ]
+
+        if not review_items:
+            console.print("[green]当前没有待巩固知识点。[/green]")
+            return
+
+        table = Table(title="🟡 待巩固知识点")
+        table.add_column("序号", style="cyan", width=4)
+        table.add_column("标题", style="white")
+        table.add_column("状态", style="yellow", width=8)
+        table.add_column("答错", width=6)
+        table.add_column("提示", width=6)
+
+        for i, chunk in review_items:
+            table.add_row(
+                str(i),
+                chunk.title or "未命名",
+                self._format_chunk_status(chunk),
+                str(chunk.fail_count),
+                str(chunk.hint_level),
+            )
+
+        console.print(table)
+        console.print("[dim]可用 /jump <序号> 回到对应知识点。[/dim]")
 
     def _show_help(self) -> None:
         """Display available commands."""
@@ -412,11 +709,17 @@ class TeacherSkillApp:
 [bold]可用命令：[/bold]
 
   /help     - 显示此帮助
-  /progress - 显示当前进度
+  /progress - 显示当前进度、掌握数、待巩固数和答题统计
+  /list     - 查看全部知识点
+  /review   - 查看待巩固知识点
+  /skip     - 跳过当前知识点，并标记为待巩固
+  /back     - 回到上一个知识点
+  /jump N   - 跳到第 N 个知识点，例如 /jump 3
   /direct   - 速查模式：直接查看答案（标记为待巩固）
-  /load     - 加载文件（在新主题输入阶段使用）
+  /load     - 加载文件；学习中使用会追加为新的知识点
   /exit     - 退出并保存进度
 
+  推荐入口：python main.py --file article.md
   直接输入回答内容即可答题
 """
         console.print(Panel.fit(help_text, title="帮助", border_style="green"))
@@ -457,7 +760,10 @@ class TeacherSkillApp:
 
 def main() -> None:
     """Application entry point."""
-    parser = argparse.ArgumentParser(description="🎓 Teacher-skill 数字助教")
+    parser = argparse.ArgumentParser(
+        description="🎓 Teacher-skill 数字助教",
+        epilog="推荐用法: python main.py --file article.md",
+    )
     parser.add_argument(
         "--file",
         help="从文件加载学习材料（支持 .md/.txt/.pdf）",
