@@ -22,6 +22,7 @@
 - 标准 Agent Skill 结构已建立：`skills/heuristic-teacher/SKILL.md` ✅
 - README 已精简为项目入口，文档已按 product/development/learning-notes/install 分区 ✅
 - GitHub Actions 单测工作流已添加，等待推送后验证 ✅
+- `.env.example` 与 `config.yaml` 配置说明已校准：API Key/base_url 在 `.env`，模型参数在 `config.yaml` ✅
 
 **结论：Phase 2 核心教学闭环 + 工程基建已可用。**
 
@@ -57,7 +58,7 @@
 | 1 | **GitHub Actions 跑绿** | 发布前自动验证单测 | 待推送后确认 |
 | 2 | **更新 changelog 发布记录** | 记录结构整理、CI、主流程修复 | ✅ 已完成 |
 | 3 | **确认发布包不含本地数据** | 避免提交 `.env`、logs、data、cache | ✅ 已确认 `.gitignore` 保护 |
-| 4 | **配置说明校准** | `.env.example` 与 `config.yaml` 的模型配置关系需一致 | 10 min |
+| 4 | **配置说明校准** | `.env.example` 与 `config.yaml` 的模型配置关系需一致 | ✅ 已完成 |
 
 ---
 

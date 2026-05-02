@@ -24,6 +24,7 @@
 **工程**
 - 补充 `PyYAML>=6.0.0` 到 `requirements.txt`，确保 `src/utils/config.py` 的 `yaml` 依赖在 CI 和新环境中可用。
 - 新增 GitHub Actions 单测工作流：`.github/workflows/tests.yml`。
+- 校准 `.env.example` 与 `config.yaml`：`.env` 只保留 API Key 和可选 base_url，模型与生成参数统一由 `config.yaml` 管理。
 
 **文档**
 - README 精简为项目入口页。

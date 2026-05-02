@@ -13,7 +13,7 @@ Use this checklist before publishing a GitHub release or sharing a packaged copy
 - [x] `skills/heuristic-teacher/SKILL.md` describes the stable Agent Skill workflow.
 - [x] `skills/heuristic-teacher/references/` contains supporting verification notes.
 - [x] `LICENSE` exists.
-- [x] `.env.example` exists and contains placeholders only.
+- [x] `.env.example` exists, contains placeholders only, and points model settings to `config.yaml`.
 - [x] `requirements.txt` includes runtime dependencies needed by tests, including `PyYAML`.
 
 ## Do Not Publish

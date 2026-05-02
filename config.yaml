@@ -2,7 +2,11 @@
 # 所有可调参数集中于此，代码中不再硬编码
 
 llm:
-  # 模型标识（ Anthropic 兼容接口）
+  # 模型标识（Anthropic 兼容接口）。
+  # 修改模型请改这里；.env 只负责 API Key 和可选 base_url。
+  # 示例：
+  # - Anthropic 官方: claude-sonnet-4-20250514
+  # - Kimi/Moonshot: kimi-k2.5（通常需要在 .env 设置 ANTHROPIC_BASE_URL）
   model_id: "claude-sonnet-4-20250514"
   # 生成参数
   temperature: 0.7
