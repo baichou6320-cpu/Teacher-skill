@@ -42,15 +42,17 @@
 | C4 | 学习中支持 `/load <路径>` 追加材料 | `main.py` / `engine.py` | ✅ 已完成 |
 | C5 | 增加学习控制命令 | `main.py` / `engine.py` | `/skip`、`/back`、`/list`、`/jump N`、`/review`，✅ 已完成 |
 | C6 | 强化 `/progress` | `main.py` | 显示掌握、待巩固、未开始、作答统计，✅ 已完成 |
-| C7 | topic 可读标题 | `models/state.py` / `storage.py` / `main.py` | 待开始 |
-| C8 | 答案提交确认 | `main.py` | 待开始 |
-| C9 | 错误反馈情绪优化 | `engine.py` / prompt | 待开始 |
+| C7 | topic 可读标题 | `models/state.py` / `storage.py` / `main.py` | ✅ 已完成 |
+| C8 | 答案提交确认 | `main.py` | ✅ 已完成：Enter 提交，`/edit` 修改，`/cancel` 取消 |
+| C9 | 错误反馈情绪优化 | `main.py` / prompt | ✅ 已完成：温和反馈面板 + hint_level 可见说明 |
 
 **验收**：
 1. 用户可以用 `python main.py --file article.md` 直接开始学习
 2. 用户可以在新主题和学习过程中使用 `/load <路径>`
 3. 用户可以使用 `/skip`、`/back`、`/list`、`/jump N`、`/review` 控制学习流程
 4. `/progress` 不只是显示 `3/7`，还显示掌握、待巩固和答题统计
+5. 用户提交答案前可以确认、修改或取消
+6. 答错反馈不再只显示红色错误，而是展示温和提示和当前提示层级
 
 ---
 
@@ -64,9 +66,9 @@
 |---|------|------|------|
 | D1 | 创建 `prompts/04_review.md` | 复习专用 Prompt | 跳过讲解，直接提问 |
 | D2 | 意图识别 + 主题匹配 | `src/core/router.py` 或 `main.py` | 关键词触发复习模式 |
-| D3 | profile 数据结构扩展 | `models/user.py` | `history_topics: List[LearnedTopic]` |
+| D3 | profile 数据结构扩展 | `models/user.py` | ✅ 已完成：`history_topics: List[LearnedTopic]` |
 | D4 | 复习引擎核心逻辑 | `src/core/review_engine.py` | 加载历史，薄弱点优先 |
-| D5 | history_topics 自动写入 | `engine.py` `_show_summary()` 时更新 | 学完主题后自动归档 |
+| D5 | history_topics 自动写入 | `main.py` `_show_summary()` 时更新 | ✅ 已完成：学完主题后自动归档，`/history` 可查看 |
 
 **验收**：
 1. 输入"复习一下之前学的 transformer"能正确识别并加载对应主题

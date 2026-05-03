@@ -26,14 +26,30 @@ class DummyLogger:
 class FakeStorage:
     """Storage stub for resume-flow tests."""
 
-    def __init__(self, topic_state: TopicState):
+    def __init__(self, topic_state: TopicState, profile: dict | None = None):
         self.topic_state = topic_state
+        self.profile = profile
+        self.saved_profile: dict | None = None
+        self.saved_topic_state: dict | None = None
+        self.saved_history: list | None = None
 
     def load_topic_state(self, topic_id: str) -> dict:
         return self.topic_state.model_dump(mode="json")
 
     def load_conversation_history(self, topic_id: str) -> dict:
         return {"messages": [{"role": "user", "content": "previous answer"}]}
+
+    def load_user_profile(self) -> dict | None:
+        return self.saved_profile or self.profile
+
+    def save_user_profile(self, profile: dict) -> None:
+        self.saved_profile = profile
+
+    def save_topic_state(self, topic_id: str, state: dict) -> None:
+        self.saved_topic_state = state
+
+    def save_conversation_history(self, topic_id: str, history: list) -> None:
+        self.saved_history = history
 
 
 class FakeEngine:
@@ -238,7 +254,7 @@ class TestLearningLoopCompletion:
         displayed: list[AIMessage] = []
         app._display_response = displayed.append
 
-        inputs = iter(["A"])
+        inputs = iter(["A", ""])
 
         def fake_input(prompt: str) -> str:
             try:
@@ -301,7 +317,7 @@ class TestLearningLoopCompletion:
         app._show_append_result = Mock()
         app._save_progress = Mock()
 
-        inputs = iter(["/load notes.md", "A"])
+        inputs = iter(["/load notes.md", "A", ""])
 
         def fake_input(prompt: str) -> str:
             try:
@@ -326,7 +342,7 @@ class TestLearningLoopCompletion:
         app._display_response = Mock()
         app._save_progress = Mock()
 
-        inputs = iter(["/skip", "A", "A"])
+        inputs = iter(["/skip", "A", "", "A", ""])
 
         def fake_input(prompt: str) -> str:
             try:
@@ -350,7 +366,7 @@ class TestLearningLoopCompletion:
         app._display_response = Mock()
         app._save_progress = Mock()
 
-        inputs = iter(["/back", "A", "A", "A"])
+        inputs = iter(["/back", "A", "", "A", "", "A", ""])
 
         def fake_input(prompt: str) -> str:
             try:
@@ -376,7 +392,7 @@ class TestLearningLoopCompletion:
         app._display_response = Mock()
         app._save_progress = Mock()
 
-        inputs = iter(["/jump 3", "A"])
+        inputs = iter(["/jump 3", "A", ""])
 
         def fake_input(prompt: str) -> str:
             try:
@@ -399,7 +415,7 @@ class TestLearningLoopCompletion:
         app._display_response = Mock()
         app._save_progress = Mock()
 
-        inputs = iter(["/list", "/review", "/jump nope", "A", "A", "A"])
+        inputs = iter(["/list", "/review", "/jump nope", "A", "", "A", "", "A", ""])
 
         def fake_input(prompt: str) -> str:
             try:
@@ -417,6 +433,128 @@ class TestLearningLoopCompletion:
             ("A", False),
             ("A", False),
         ]
+
+    def test_answer_confirmation_allows_edit_before_submit(self, monkeypatch):
+        topic_state = make_topic_state()
+        engine = FakeEngine()
+        app = make_app(engine)
+        app._display_response = Mock()
+
+        inputs = iter(["draft answer", "/edit", "revised answer", ""])
+
+        def fake_input(prompt: str) -> str:
+            try:
+                return next(inputs)
+            except StopIteration as exc:
+                raise AssertionError("learning loop did not stop after completion") from exc
+
+        monkeypatch.setattr(main.console, "input", fake_input)
+
+        app._learning_loop(topic_state)
+
+        assert engine.receive_answer_calls == [("revised answer", False)]
+
+    def test_answer_confirmation_can_cancel_without_submitting(self, monkeypatch):
+        topic_state = make_topic_state()
+        engine = FakeEngine()
+        app = make_app(engine)
+        app._display_response = Mock()
+
+        inputs = iter(["draft answer", "/cancel", "final answer", ""])
+
+        def fake_input(prompt: str) -> str:
+            try:
+                return next(inputs)
+            except StopIteration as exc:
+                raise AssertionError("learning loop did not stop after completion") from exc
+
+        monkeypatch.setattr(main.console, "input", fake_input)
+
+        app._learning_loop(topic_state)
+
+        assert engine.receive_answer_calls == [("final answer", False)]
+
+
+class TestFeedbackDisplay:
+    """Tests for answer feedback rendering helpers."""
+
+    def test_hint_level_label_names_progressive_hint_depth(self):
+        app = make_app()
+
+        assert app._hint_level_label(1) == "线索提示"
+        assert app._hint_level_label(2) == "生活类比"
+        assert app._hint_level_label(3) == "半解析"
+        assert app._hint_level_label(4) == "关键词/部分答案"
+        assert app._hint_level_label(9) == "渐进提示"
+
+    def test_wrong_feedback_uses_supportive_display(self):
+        app = make_app()
+        response = AIMessage(
+            response_type=ResponseType.FEEDBACK_WRONG,
+            content="hint",
+            hint_level=2,
+        )
+        app._display_supportive_feedback = Mock()
+
+        app._display_response(response)
+
+        app._display_supportive_feedback.assert_called_once_with(response)
+
+
+class TestHistoryArchive:
+    """Tests for archived learning topic summaries."""
+
+    def test_archive_completed_topic_updates_profile_and_deduplicates_topic(self):
+        topic_state = make_multi_topic_state()
+        topic_state.title = "Transformer 入门"
+        topic_state.summary = "注意力机制基础"
+        topic_state.source_type = "file"
+        topic_state.source_path = "notes/transformer.md"
+        storage = FakeStorage(
+            topic_state,
+            profile={
+                "user_id": "user_test",
+                "level": "beginner",
+                "history_topics": [
+                    {
+                        "topic_id": "topic_test",
+                        "title": "旧标题",
+                        "completed_at": "2026-05-01T10:00:00",
+                        "total_chunks": 1,
+                        "mastered_chunks": 1,
+                        "review_chunks": 0,
+                    },
+                    {
+                        "topic_id": "topic_other",
+                        "title": "其他主题",
+                        "completed_at": "2026-05-01T11:00:00",
+                        "total_chunks": 2,
+                        "mastered_chunks": 2,
+                        "review_chunks": 0,
+                    },
+                ],
+            },
+        )
+        app = make_app()
+        app.storage = storage
+
+        app._archive_completed_topic(topic_state, mastered=2, needs_review=1, total=3)
+
+        saved = storage.saved_profile
+        assert saved is not None
+        assert saved["total_topics"] == 2
+        assert saved["completed_topics"] == 2
+        assert [topic["topic_id"] for topic in saved["history_topics"]] == [
+            "topic_test",
+            "topic_other",
+        ]
+        archived = saved["history_topics"][0]
+        assert archived["title"] == "Transformer 入门"
+        assert archived["summary"] == "注意力机制基础"
+        assert archived["total_chunks"] == 3
+        assert archived["mastered_chunks"] == 2
+        assert archived["review_chunks"] == 1
+        assert archived["source_path"] == "notes/transformer.md"
 
 
 class TestMaterialInput:
@@ -448,3 +586,40 @@ class TestMaterialInput:
 
         assert material == "file material"
         app._load_material_from_file.assert_called_once_with("article.md")
+
+
+class TestTopicMetadata:
+    """Tests for readable topic metadata helpers."""
+
+    def test_apply_topic_metadata_uses_file_stem_when_title_missing(self):
+        app = make_app()
+        topic_state = make_multi_topic_state()
+        topic_state.title = ""
+        topic_state.summary = ""
+
+        app._apply_topic_metadata(
+            topic_state,
+            "Transformer notes",
+            source_path="docs/Transformer 入门.md",
+        )
+
+        assert topic_state.title == "Transformer 入门"
+        assert topic_state.summary == "Chunk 1、Chunk 2、Chunk 3"
+        assert topic_state.source_type == "file"
+        assert topic_state.source_path == "docs/Transformer 入门.md"
+        assert topic_state.material_chars == len("Transformer notes")
+
+    def test_topic_display_title_falls_back_to_chunk_title_for_legacy_state(self):
+        app = make_app()
+        state = {
+            "chunks": [
+                {"title": "注意力机制"},
+            ]
+        }
+
+        assert app._topic_display_title("topic_20260503_120000", state) == "注意力机制"
+
+    def test_topic_display_title_falls_back_to_topic_id(self):
+        app = make_app()
+
+        assert app._topic_display_title("topic_20260503_120000", {}) == "topic_20260503_120000"

@@ -16,6 +16,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from rich.console import Console
+from rich.markup import escape
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
@@ -28,7 +29,7 @@ from src.core.memory import ConversationMemory
 from src.utils.storage import TopicStorage
 from models.protocol import AIMessage, ResponseType
 from models.state import ChunkState, TopicState, LearningStatus
-from models.user import UserProfile
+from models.user import LearnedTopic, UserProfile
 
 
 console = Console()
@@ -148,33 +149,117 @@ class TeacherSkillApp:
 
         Returns the selected topic_id, or None to start a new topic.
         """
-        topics = self.storage.list_topics()
-        self.logger.info(f"Found {len(topics)} existing topics")
-        if not topics:
+        topic_rows = [
+            (topic_id, self.storage.load_topic_state(topic_id) or {})
+            for topic_id in self.storage.list_topics()
+        ]
+        topic_rows.sort(
+            key=lambda row: row[1].get("updated_at")
+            or row[1].get("created_at")
+            or "",
+            reverse=True,
+        )
+        self.logger.info(f"Found {len(topic_rows)} existing topics")
+        if not topic_rows:
             return None
 
-        console.print(f"[cyan]📁 发现 {len(topics)} 个进行中的主题[/cyan]")
-        for i, t in enumerate(topics, 1):
-            state = self.storage.load_topic_state(t)
-            if state:
-                progress = state.get("current_chunk_index", 0) + 1
-                total = state.get("total_chunks", 0)
-                status = "已完成" if state.get("is_completed") else "进行中"
-                console.print(f"  [{i}] {t}: 进度 {progress}/{total} ({status})")
+        console.print(f"[cyan]📁 发现 {len(topic_rows)} 个进行中的主题[/cyan]")
+        for i, (topic_id, state) in enumerate(topic_rows, 1):
+            title = self._topic_display_title(topic_id, state)
+            total = state.get("total_chunks", 0)
+            current_index = state.get("current_chunk_index", 0)
+            progress = min(current_index + 1, total) if total else 0
+            status = "已完成" if state.get("is_completed") else "进行中"
+            updated = self._format_topic_time(state)
+            source = self._topic_source_label(state)
+            console.print(
+                f"  [{i}] [bold]{escape(title)}[/bold]: 进度 {progress}/{total} ({status})"
+            )
+
+            summary = self._topic_display_summary(state)
+            details = [f"ID: {topic_id}", f"来源: {source}"]
+            if updated:
+                details.append(f"更新: {updated}")
+            if summary:
+                details.insert(0, summary)
+            console.print(f"      [dim]{escape(' · '.join(details))}[/dim]")
         console.print()
-        console.print("[dim]输入对应数字继续学习，或输入 new 开始新主题[/dim]")
+        console.print(
+            "[dim]输入对应数字继续学习，输入 new 开始新主题，或输入 history 查看历史记录[/dim]"
+        )
 
         while True:
             choice = console.input("\n[bold blue>[/bold blue] ").strip()
             if choice.lower() == "new":
                 return None
+            if choice.lower() == "history":
+                self._show_history_topics()
+                continue
             try:
                 idx = int(choice)
-                if 1 <= idx <= len(topics):
-                    return topics[idx - 1]
+                if 1 <= idx <= len(topic_rows):
+                    return topic_rows[idx - 1][0]
                 console.print("[red]无效的选择，请重新输入[/red]")
             except ValueError:
-                console.print("[red]请输入数字或 new[/red]")
+                console.print("[red]请输入数字、new 或 history[/red]")
+
+    def _topic_display_title(self, topic_id: str, state: dict) -> str:
+        """Return a readable topic title for history selection."""
+        title = str(state.get("title") or "").strip()
+        if title:
+            return title
+
+        source_path = str(state.get("source_path") or "").strip()
+        if source_path:
+            stem = Path(source_path).stem.strip()
+            if stem:
+                return stem
+
+        for chunk in state.get("chunks", []) or []:
+            chunk_title = str(chunk.get("title") or "").strip()
+            if chunk_title:
+                return chunk_title
+
+        return topic_id
+
+    def _topic_display_summary(self, state: dict) -> str:
+        """Return a short readable topic summary for history selection."""
+        summary = str(state.get("summary") or "").strip()
+        if summary:
+            return summary[:100]
+
+        titles = [
+            str(chunk.get("title") or "").strip()
+            for chunk in state.get("chunks", []) or []
+            if str(chunk.get("title") or "").strip()
+        ]
+        if titles:
+            summary = "、".join(titles[:3])
+            if len(titles) > 3:
+                summary += " 等"
+            return summary[:100]
+
+        return ""
+
+    def _topic_source_label(self, state: dict) -> str:
+        """Return a readable material source label."""
+        source_type = str(state.get("source_type") or "").strip()
+        source_path = str(state.get("source_path") or "").strip()
+        if source_path:
+            return f"文件 {Path(source_path).name}"
+        if source_type == "file":
+            return "文件"
+        return "手动输入"
+
+    def _format_topic_time(self, state: dict) -> str:
+        """Format topic timestamp for display."""
+        value = state.get("updated_at") or state.get("created_at")
+        if not value:
+            return ""
+        try:
+            return datetime.fromisoformat(str(value)).strftime("%Y-%m-%d %H:%M")
+        except ValueError:
+            return str(value)
 
     def _resume_topic(self, topic_id: str) -> None:
         """Resume an existing topic from its saved state."""
@@ -189,6 +274,7 @@ class TeacherSkillApp:
             return
 
         topic_state = TopicState.model_validate(state_data)
+        console.print(f"[dim]主题：{escape(topic_state.title or topic_id)}[/dim]")
         self.current_engine = TutorEngine(self.user_id, topic_id)
 
         if history_data and history_data.get("messages"):
@@ -239,11 +325,77 @@ class TeacherSkillApp:
             topic_state = self.current_engine.analyze_material(
                 material, user_level=user_level
             )
+            self._apply_topic_metadata(topic_state, material, source_path=file_path)
 
         self.logger.info(f"Material analyzed: {topic_state.total_chunks} chunks")
         self._show_analysis_result(topic_state)
         self._learning_loop(topic_state)
         self._show_summary(topic_state)
+
+    def _apply_topic_metadata(
+        self,
+        topic_state: TopicState,
+        material: str,
+        source_path: str | None = None,
+    ) -> None:
+        """Fill missing human-readable topic metadata."""
+        if source_path:
+            topic_state.source_type = "file"
+            topic_state.source_path = source_path
+        else:
+            topic_state.source_type = "manual"
+            topic_state.source_path = None
+
+        topic_state.material_chars = len(material)
+
+        if not topic_state.title:
+            topic_state.title = self._infer_topic_title(topic_state, material, source_path)
+        if not topic_state.summary:
+            topic_state.summary = self._infer_topic_summary(topic_state, material)
+        topic_state.updated_at = datetime.now()
+
+    def _infer_topic_title(
+        self,
+        topic_state: TopicState,
+        material: str,
+        source_path: str | None = None,
+    ) -> str:
+        """Infer a readable topic title without an extra LLM call."""
+        if source_path:
+            stem = Path(source_path).stem.strip()
+            if stem:
+                return stem[:40]
+
+        first_chunk_title = next(
+            (chunk.title.strip() for chunk in topic_state.chunks if chunk.title.strip()),
+            "",
+        )
+        if first_chunk_title:
+            return first_chunk_title[:40]
+
+        first_line = next(
+            (line.strip() for line in material.splitlines() if line.strip()),
+            "",
+        )
+        if first_line:
+            return first_line[:40]
+
+        return topic_state.topic_id
+
+    def _infer_topic_summary(self, topic_state: TopicState, material: str) -> str:
+        """Infer a short topic summary from chunks or material."""
+        titles = [chunk.title.strip() for chunk in topic_state.chunks if chunk.title.strip()]
+        if titles:
+            summary = "、".join(titles[:3])
+            if len(titles) > 3:
+                summary += " 等"
+            return summary[:100]
+
+        first_line = next(
+            (line.strip() for line in material.splitlines() if line.strip()),
+            "",
+        )
+        return first_line[:100]
 
     def _load_material_from_file(self, file_path: str) -> str | None:
         """从文件加载学习材料，返回内容或 None（加载失败时）。"""
@@ -435,6 +587,10 @@ class TeacherSkillApp:
                 self._show_review_items()
                 continue
 
+            if user_input.lower() == "/history":
+                self._show_history_topics()
+                continue
+
             if self._handle_jump_command(user_input):
                 continue
 
@@ -447,8 +603,12 @@ class TeacherSkillApp:
                 continue
 
             # Normal answer
-            self.logger.debug(f"User answer: {user_input[:50]}...")
-            response = self.current_engine.receive_answer(user_input, is_direct=False)
+            confirmed_answer = self._confirm_answer_submission(user_input)
+            if confirmed_answer is None:
+                continue
+
+            self.logger.debug(f"User answer: {confirmed_answer[:50]}...")
+            response = self.current_engine.receive_answer(confirmed_answer, is_direct=False)
             self._display_response(response)
 
             if response.response_type == ResponseType.FEEDBACK_CORRECT:
@@ -471,6 +631,37 @@ class TeacherSkillApp:
             return True
         self._display_response(response)
         return False
+
+    def _confirm_answer_submission(self, answer: str) -> str | None:
+        """Ask the user to confirm, edit, or cancel an answer before judging."""
+        current_answer = answer.strip()
+        while True:
+            console.print(
+                Panel.fit(
+                    "[bold]确认提交这次回答？[/bold]\n\n"
+                    f"{escape(current_answer)}\n\n"
+                    "[dim]按 Enter 提交，输入 /edit 修改，输入 /cancel 取消。[/dim]",
+                    border_style="blue",
+                )
+            )
+            choice = console.input("[bold blue确认>[/bold blue] ").strip()
+            if not choice:
+                return current_answer
+
+            lowered = choice.lower()
+            if lowered == "/cancel":
+                console.print("[cyan]已取消本次回答，可以重新输入。[/cyan]")
+                return None
+
+            if lowered == "/edit":
+                edited = console.input("[bold blue修改回答>[/bold blue] ").strip()
+                if not edited:
+                    console.print("[yellow]修改内容为空，保留原回答。[/yellow]")
+                    continue
+                current_answer = edited
+                continue
+
+            console.print("[yellow]请按 Enter 提交，或输入 /edit、/cancel。[/yellow]")
 
     def _handle_skip(self) -> bool:
         """Skip the current chunk and continue or finish."""
@@ -539,9 +730,7 @@ class TeacherSkillApp:
             case ResponseType.FEEDBACK_CORRECT:
                 console.print(f"[green]✅ {response.content}[/green]")
             case ResponseType.FEEDBACK_WRONG | ResponseType.FEEDBACK_HINT:
-                console.print(f"[red]❌ {response.content}[/red]")
-                if response.hint_level > 0:
-                    console.print(f"[dim]提示等级: {response.hint_level}[/dim]")
+                self._display_supportive_feedback(response)
             case ResponseType.DIRECT_ANSWER:
                 console.print(
                     Panel.fit(
@@ -550,12 +739,47 @@ class TeacherSkillApp:
                     )
                 )
 
+    def _display_supportive_feedback(self, response: AIMessage) -> None:
+        """Render wrong-answer feedback without making the user feel punished."""
+        hint_level = max(0, min(response.hint_level, 4))
+        title = "还差一点，我们换个角度试试"
+        if hint_level >= 4:
+            title = "这一题先放进待巩固，我们保留节奏继续前进"
+
+        details = []
+        if hint_level > 0:
+            details.append(
+                f"提示层级：第 {hint_level}/4 层（{self._hint_level_label(hint_level)}）"
+            )
+        details.append("你可以继续尝试；想先看答案可输入 /direct，系统会标记为待巩固。")
+
+        console.print(
+            Panel.fit(
+                f"[bold yellow]{title}[/bold yellow]\n\n"
+                f"{escape(response.content)}\n\n"
+                f"[dim]{escape(' · '.join(details))}[/dim]",
+                border_style="yellow",
+            )
+        )
+
+    def _hint_level_label(self, hint_level: int) -> str:
+        """Return a human-readable label for progressive hint levels."""
+        labels = {
+            1: "线索提示",
+            2: "生活类比",
+            3: "半解析",
+            4: "关键词/部分答案",
+        }
+        return labels.get(hint_level, "渐进提示")
+
     def _show_analysis_result(self, topic_state: TopicState) -> None:
         """Display the result of material analysis."""
         console.print(
             Panel.fit(
                 f"[bold green]✅ 材料分析完成！[/bold green]\n\n"
-                f"主题：{topic_state.topic_id}\n"
+                f"主题：{escape(topic_state.title or topic_state.topic_id)}\n"
+                f"摘要：{escape(topic_state.summary or '暂无')}\n"
+                f"来源：{escape(self._topic_source_label(topic_state.model_dump(mode='json')))}\n"
                 f"知识点数量：{topic_state.total_chunks} 个",
                 border_style="green",
             )
@@ -703,6 +927,32 @@ class TeacherSkillApp:
         console.print(table)
         console.print("[dim]可用 /jump <序号> 回到对应知识点。[/dim]")
 
+    def _show_history_topics(self) -> None:
+        """Display archived learning topics from the user profile."""
+        profile = self._load_or_create_profile()
+        if not profile.history_topics:
+            console.print("[yellow]还没有历史学习记录。完成一个主题后会自动归档到这里。[/yellow]")
+            return
+
+        table = Table(title="📚 历史学习记录")
+        table.add_column("序号", style="cyan", width=4)
+        table.add_column("主题", style="white")
+        table.add_column("掌握", style="green", width=8)
+        table.add_column("待巩固", style="yellow", width=8)
+        table.add_column("完成时间", style="dim", width=16)
+
+        for i, topic in enumerate(profile.history_topics, 1):
+            table.add_row(
+                str(i),
+                escape(topic.title or topic.topic_id),
+                f"{topic.mastered_chunks}/{topic.total_chunks}",
+                str(topic.review_chunks),
+                topic.completed_at.strftime("%Y-%m-%d %H:%M"),
+            )
+
+        console.print(table)
+        console.print("[dim]后续复习模式会优先使用这些历史记录和待巩固知识点。[/dim]")
+
     def _show_help(self) -> None:
         """Display available commands."""
         help_text = """
@@ -712,6 +962,7 @@ class TeacherSkillApp:
   /progress - 显示当前进度、掌握数、待巩固数和答题统计
   /list     - 查看全部知识点
   /review   - 查看待巩固知识点
+  /history  - 查看已归档的历史学习主题
   /skip     - 跳过当前知识点，并标记为待巩固
   /back     - 回到上一个知识点
   /jump N   - 跳到第 N 个知识点，例如 /jump 3
@@ -735,13 +986,54 @@ class TeacherSkillApp:
         console.print(
             Panel.fit(
                 f"[bold green]🎉 学习完成！[/bold green]\n\n"
+                f"主题: [cyan]{escape(topic_state.title or topic_state.topic_id)}[/cyan]\n"
                 f"掌握: [green]{mastered}[/green] / {total}\n"
                 f"待巩固: [yellow]{needs_review}[/yellow]\n"
                 f"完成率: [cyan]{rate:.0f}%[/cyan]",
                 border_style="green",
             )
         )
+        self._archive_completed_topic(topic_state, mastered, needs_review, total)
         self._save_progress()
+
+    def _load_or_create_profile(self) -> UserProfile:
+        """Load the current user profile, filling defaults for older profiles."""
+        profile_data = self.storage.load_user_profile() or {}
+        profile_data = {"user_id": self.user_id, "level": self.user_level, **profile_data}
+        return UserProfile.model_validate(profile_data)
+
+    def _archive_completed_topic(
+        self,
+        topic_state: TopicState,
+        mastered: int,
+        needs_review: int,
+        total: int,
+    ) -> None:
+        """Archive a completed topic into the user profile for future review."""
+        profile = self._load_or_create_profile()
+        learned_topic = LearnedTopic(
+            topic_id=topic_state.topic_id,
+            title=topic_state.title or topic_state.topic_id,
+            summary=topic_state.summary,
+            completed_at=datetime.now(),
+            total_chunks=total,
+            mastered_chunks=mastered,
+            review_chunks=needs_review,
+            source_type=topic_state.source_type,
+            source_path=topic_state.source_path,
+        )
+
+        profile.history_topics = [
+            topic
+            for topic in profile.history_topics
+            if topic.topic_id != topic_state.topic_id
+        ]
+        profile.history_topics.insert(0, learned_topic)
+        profile.total_topics = len(profile.history_topics)
+        profile.completed_topics = len(profile.history_topics)
+        profile.updated_at = datetime.now()
+        self.storage.save_user_profile(profile.model_dump(mode="json"))
+        console.print("[dim]已归档到历史学习记录，可用 /history 查看。[/dim]")
 
     def _save_progress(self) -> None:
         """Persist current topic state and conversation history."""

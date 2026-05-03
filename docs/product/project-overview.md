@@ -69,6 +69,7 @@ python main.py --file article.md  # 从文件加载
 | `/progress` | 查看当前进度 | ✅ 可用 | 显示当前知识点、掌握数、待巩固数和答题统计 |
 | `/list` | 查看知识点列表 | ✅ 可用 | 显示全部 chunk、状态、答错次数、提示层级 |
 | `/review` | 查看待巩固知识点 | ✅ 可用 | 只查看当前 topic 的待巩固列表，不启动跨主题复习模式 |
+| `/history` | 查看历史学习记录 | ✅ 可用 | 主题完成后自动归档到 `profile.history_topics` |
 | `/skip` | 跳过当前知识点 | ✅ 可用 | 标记为待巩固并进入下一知识点 |
 | `/back` | 回到上一个知识点 | ✅ 可用 | 重新讲解上一个知识点 |
 | `/jump N` | 跳转到指定知识点 | ✅ 可用 | 例如 `/jump 3` |
@@ -91,6 +92,7 @@ python main.py --file article.md  # 从文件加载
   ├── /progress ──→ 显示进度
   ├── /list ──→ 显示全部知识点
   ├── /review ──→ 显示当前 topic 待巩固知识点
+  ├── /history ──→ 显示已归档历史学习主题
   ├── /skip ──→ 标记待巩固并进入下一知识点
   ├── /back ──→ 回到上一个知识点
   ├── /jump N ──→ 跳到指定知识点
@@ -313,7 +315,7 @@ progress = engine.get_progress()  # "2/5"
 | Prompt 拆分 | ✅ 完成 | 分层架构 |
 | 错误处理 | ✅ 完成 | LLM 超时/断网友好提示 |
 | 单元测试 | ✅ 完成 | pytest，不依赖真实 LLM |
-| CLI 控制命令 | ✅ 完成 | /skip、/back、/list、/jump、/review 列表 |
+| CLI 控制命令 | ✅ 完成 | /skip、/back、/list、/jump、/review、/history |
 | 跨主题复习模式 | 🔨 框架已设计 | 自然语言触发，如“复习一下 transformer” |
 
 ### Phase 3 Skill 体系

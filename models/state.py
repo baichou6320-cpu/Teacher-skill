@@ -40,6 +40,11 @@ class TopicState(BaseModel):
 
     topic_id: str
     user_id: str
+    title: str = Field(default="", description="Human-readable topic title")
+    summary: str = Field(default="", description="Short topic summary")
+    source_type: str = Field(default="manual", description="Material source: manual or file")
+    source_path: Optional[str] = Field(default=None, description="Original material file path")
+    material_chars: int = Field(default=0, description="Length of original material")
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
     current_chunk_index: int = Field(default=0, description="Index of current chunk being studied")
@@ -52,6 +57,11 @@ class TopicState(BaseModel):
             "example": {
                 "topic_id": "topic_001",
                 "user_id": "user_001",
+                "title": "Transformer 的基本原理",
+                "summary": "学习 Transformer 的注意力机制和核心结构",
+                "source_type": "file",
+                "source_path": "notes/transformer.md",
+                "material_chars": 1200,
                 "current_chunk_index": 0,
                 "total_chunks": 5,
                 "is_completed": False,

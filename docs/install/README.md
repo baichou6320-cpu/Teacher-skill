@@ -110,6 +110,7 @@ Useful learning commands:
 - `/progress` shows progress, mastered items, review items, and answer stats.
 - `/list` shows all knowledge points.
 - `/review` shows weak or review-needed knowledge points.
+- `/history` shows archived topics after completion.
 - `/skip` skips the current point and marks it as needing review.
 - `/back` returns to the previous point.
 - `/jump N` jumps to a specific point, for example `/jump 3`.

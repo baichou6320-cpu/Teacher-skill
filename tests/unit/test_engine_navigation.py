@@ -128,3 +128,35 @@ def test_jump_rejects_out_of_range_chunk():
 
     with pytest.raises(ValueError):
         engine.jump_to_chunk(4)
+
+
+def test_analyze_material_saves_readable_topic_metadata():
+    engine = TutorEngine.__new__(TutorEngine)
+    engine.user_id = "user_test"
+    engine.topic_id = "topic_test"
+    engine.state = TutorState.IDLE
+    engine.logger = DummyLogger()
+
+    def fake_analysis(material: str, user_level: str) -> dict:
+        return {
+            "topic_title": "Transformer 入门",
+            "summary": "理解注意力机制和编码器结构",
+            "chunks": [
+                {
+                    "chunk_id": "chunk_1",
+                    "title": "注意力机制",
+                    "content": "content",
+                    "question": "question?",
+                    "correct_answer": "answer",
+                }
+            ],
+        }
+
+    engine._request_material_analysis = fake_analysis
+
+    topic_state = engine.analyze_material("material text", user_level="beginner")
+
+    assert topic_state.title == "Transformer 入门"
+    assert topic_state.summary == "理解注意力机制和编码器结构"
+    assert topic_state.material_chars == len("material text")
+    assert topic_state.total_chunks == 1

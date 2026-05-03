@@ -243,6 +243,9 @@ class TutorEngine:
         self.topic_state = TopicState(
             topic_id=self.topic_id,
             user_id=self.user_id,
+            title=parsed.get("topic_title", parsed.get("title", "")),
+            summary=parsed.get("summary", ""),
+            material_chars=len(material),
             total_chunks=len(chunks),
             chunks=chunks,
         )

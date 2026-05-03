@@ -107,6 +107,8 @@ def _match_topic(user_input: str) -> str | None:
 
 **文件**：`models/user.py`
 
+**状态**：✅ 已完成。当前模型已包含 `LearnedTopic` 与 `UserProfile.history_topics`，字段名以代码为准：`title`、`completed_at`、`total_chunks`、`mastered_chunks`、`review_chunks` 等。
+
 **更新 `UserProfile` model**：
 ```python
 class LearnedTopic(BaseModel):
@@ -152,6 +154,8 @@ def receive_review_answer(self, answer: str) -> AIMessage:
 
 **位置**：在 `_show_summary()` 或 `_save_progress()` 时更新
 
+**状态**：✅ 已完成。当前实现在 `main.py` 的 `_show_summary()` 中调用 `_archive_completed_topic()`，主题完成后自动写入 `profile.history_topics`，并可通过 `/history` 查看。
+
 **逻辑**：
 ```python
 def _update_history_topics(self, topic_state: TopicState):
@@ -161,7 +165,7 @@ def _update_history_topics(self, topic_state: TopicState):
 
     entry = LearnedTopic(
         topic_id=topic_state.topic_id,
-        topic_title=topic_state.topic_id,  # 或从 chunks[0] 取 title
+        topic_title=topic_state.title or topic_state.topic_id,
         learned_at=datetime.now(),
         chunk_count=topic_state.total_chunks,
         mastered_count=mastered,
@@ -186,11 +190,11 @@ def _update_history_topics(self, topic_state: TopicState):
 
 | 任务 | 优先级 | 理由 |
 |------|--------|------|
-| D3 | P0 | 数据结构是一切基础 |
+| D3 | P0 | ✅ 已完成：数据结构是一切基础 |
 | D2 | P0 | 意图识别是入口 |
 | D1 | P1 | Prompt 依赖 D2/D3 |
 | D4 | P1 | 核心复习逻辑 |
-| D5 | P2 | 可以手动维护 history_topics 暂不自动更新 |
+| D5 | P2 | ✅ 已完成：自动维护 history_topics |
 
 ---
 

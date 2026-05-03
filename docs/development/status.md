@@ -1,7 +1,7 @@
 # 项目状态总览
 
-> **更新日期**：2026-05-02
-> **当前阶段**：v0.2.0 GitHub 首发准备完成（本地单元测试 102/102 通过，GitHub Actions 通过）
+> **更新日期**：2026-05-03
+> **当前阶段**：v0.3.0 CLI 可用性修复推进中（v0.2.0 已具备 GitHub 首发条件）
 > **阅读建议**：每天开工前看一遍，确认今天要修哪个模块
 
 ---
@@ -18,13 +18,14 @@
 **附加能力：**
 - `--file` / `/load` 加载本地文件（.md/.txt/.pdf）✅
 - Prompt 分层架构（base + persona + system module）✅
-- 单元测试 102 个，无需 API Key 即可运行，本地已通过 ✅
+- 单元测试无需 API Key 即可运行；本次 CLI 可用性改动新增测试后，需重新跑本地或 CI 确认 ✅
 - 标准 Agent Skill 结构已建立：`skills/heuristic-teacher/SKILL.md` ✅
 - README 已精简为项目入口，文档已按 product/development/learning-notes/install 分区 ✅
 - GitHub Actions 单测工作流已通过 ✅
 - `.env.example` 与 `config.yaml` 配置说明已校准：API Key/base_url 在 `.env`，模型参数在 `config.yaml` ✅
 - 安装和配置文档已完善：`docs/install/README.md` ✅
-- CLI 可用性第一批修复已完成：推荐 `--file`、支持 `/load` 追加材料、支持 `/skip`/`/back`/`/list`/`/jump`/`/review` ✅
+- CLI 可用性修复已推进：推荐 `--file`、支持 `/load` 追加材料、支持 `/skip`/`/back`/`/list`/`/jump`/`/review`、历史 topic 显示可读标题、答案提交确认、温和错误反馈 ✅
+- 复习模式地基已开始：完成主题后自动写入 `profile.history_topics`，可用 `/history` 查看历史学习记录 ✅
 
 **结论：Phase 2 核心教学闭环 + 工程基建已可用。**
 
@@ -47,7 +48,7 @@
 | Onboarding | `main.py` + `00_onboarding.md` | ✅ 已跑通 | 自动摸底，判定水平 |
 | 进度恢复 | `main.py` | ✅ 已可用 | 数字选择恢复 / `new` 创建新主题 |
 | 历史持久化 | `main.py` `_save_progress()` | ✅ 已可用 | 保存 `state.json` + `history.json` |
-| 单元测试 | `tests/unit/` × 7 文件 | ✅ 本地 102/102 通过 | translator/memory/rewards/config/file_loader/storage/main flow |
+| 单元测试 | `tests/unit/` × 8 文件 | 🚧 待重新验证 | translator/memory/rewards/config/file_loader/storage/main flow/engine navigation |
 | Agent Skill | `skills/heuristic-teacher/SKILL.md` | ✅ 已建立 | 独立于产品文档，包含工作流与验证标准 |
 | CI | `.github/workflows/tests.yml` | ✅ 通过 | GitHub Actions `Tests` workflow 已跑绿 |
 
@@ -69,8 +70,8 @@
 | 版本 | 目标 | 内容 | 状态 |
 |------|------|------|------|
 | **v0.2.0** | GitHub 首发 | README、安装文档、Skill 结构、CI、发布清单已完成 | ✅ 可发布 |
-| **v0.3.0** | CLI 可用性 | 输入体验、学习控制命令、进度感知 | 🚧 进行中 |
-| **v0.4.0** | 复习模式 | 自然语言触发复习、跳过讲解直接提问、薄弱点优先 | ⏳ 待开始 |
+| **v0.3.0** | CLI 可用性 | 输入体验、学习控制命令、进度感知、答案确认、反馈优化 | 🚧 进行中 |
+| **v0.4.0** | 复习模式 | 历史归档已完成；自然语言触发复习、跳过讲解直接提问、薄弱点优先待做 | 🚧 进行中 |
 | **v0.5.0** | 教学风格 | Persona 体系（严师/良师/苏格拉底/Peer） | ⏳ 待开始 |
 | **v1.0.0** | 普通用户产品版 | Web UI、拖拽上传、可视化进度、低门槛配置 | ⏳ 待开始 |
 
@@ -79,7 +80,7 @@
 ## 五、快速验证
 
 ```bash
-# 单元测试（无需 API Key，CI 可用；2026-05-02 本地 102/102 通过）
+# 单元测试（无需 API Key，CI 可用；本次 CLI 可用性改动后请重新运行）
 pytest tests/unit/
 
 # 端到端测试（需要 API Key）
