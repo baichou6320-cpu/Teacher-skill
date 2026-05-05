@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" role="img" aria-labelledby="title desc">
+  <title id="title">Heuristic Teacher logo</title>
+  <desc id="desc">A visual identity for a tutoring skill that teaches, questions, judges, and reviews.</desc>
+  <rect width="960" height="540" rx="72" fill="#F8FAFC"/>
+  <rect x="72" y="72" width="816" height="396" rx="48" fill="#0F766E"/>
+  <path d="M196 168h184c54 0 98 44 98 98v164c0 15-13 28-28 28H196c-44 0-80-36-80-80V248c0-44 36-80 80-80Z" fill="#ECFEFF"/>
+  <path d="M764 168H580c-54 0-98 44-98 98v164c0 15 13 28 28 28h254c44 0 80-36 80-80V248c0-44-36-80-80-80Z" fill="#CCFBF1"/>
+  <path d="M480 214v226" stroke="#0F766E" stroke-width="24" stroke-linecap="round"/>
+  <path d="M196 232h134M196 294h134M196 356h98" stroke="#115E59" stroke-width="20" stroke-linecap="round"/>
+  <path d="M630 232h134M630 294h134M666 356h98" stroke="#115E59" stroke-width="20" stroke-linecap="round"/>
+  <circle cx="480" cy="150" r="64" fill="#F59E0B"/>
+  <text x="480" y="176" text-anchor="middle" font-family="Arial, sans-serif" font-size="112" font-weight="700" fill="#FFFFFF">?</text>
+  <path d="M596 380c68-18 118-80 118-154" fill="none" stroke="#F59E0B" stroke-width="24" stroke-linecap="round"/>
+  <path d="M714 226l-32 24 40 12" fill="none" stroke="#F59E0B" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M364 250c-68 18-118 80-118 154" fill="none" stroke="#F59E0B" stroke-width="24" stroke-linecap="round"/>
+  <path d="M246 404l32-24-40-12" fill="none" stroke="#F59E0B" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

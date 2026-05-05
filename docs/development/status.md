@@ -26,6 +26,7 @@
 - 安装和配置文档已完善：`docs/install/README.md` ✅
 - CLI 可用性修复已推进：支持 `--init` 项目初始化、`--check` 启动环境检查（依赖缺失时也能轻量解析配置）、`--demo` 示例体验、推荐 `--file`、支持 `/load` 追加材料、支持 `/skip`/`/back`/`/list`/`/jump`/`/review`、历史 topic 显示可读标题、答案提交确认、温和错误反馈 ✅
 - 复习模式已形成可用闭环：完成主题后自动写入 `profile.history_topics`，可用 `/history` 查看历史学习记录，支持“复习一下 xxx”匹配历史主题，按薄弱点优先直接提问，接入复习专用短反馈 Prompt，并在复习结束后输出统计报告、更新 `last_reviewed_at` ✅
+- CLI 工程结构已开始模块化：`main.py` 拆出 `src/cli/environment.py`、`src/cli/display.py`、`src/cli/review.py`，入口文件从“所有逻辑集中”转为“入口 + 应用编排 + 兼容包装” ✅
 
 **结论：Phase 2 核心教学闭环 + 工程基建已可用。**
 
@@ -48,7 +49,8 @@
 | Onboarding | `main.py` + `00_onboarding.md` | ✅ 已跑通 | 自动摸底，判定水平 |
 | 进度恢复 | `main.py` | ✅ 已可用 | 数字选择恢复 / `new` 创建新主题 |
 | 历史持久化 | `main.py` `_save_progress()` | ✅ 已可用 | 保存 `state.json` + `history.json` |
-| 单元测试 | `tests/unit/` × 8 文件 | 🚧 待重新验证 | 当前环境缺少可用 pytest；复习报告、`--check` 和 `--init` 改动已通过 `py_compile`，需本地或 CI 重新跑单测 |
+| CLI 辅助模块 | `src/cli/environment.py`、`src/cli/display.py`、`src/cli/review.py` | ✅ 已拆分 | 启动检查、控制台渲染、复习 CLI 从 `main.py` 分离 |
+| 单元测试 | `tests/unit/` × 8 文件 | 🚧 部分本地验证通过 | 当前 Codex 环境仍受 Windows 临时目录权限影响，`tmp_path` 类测试无法完整跑；已验证 `test_main_flow.py` 非环境子集、`test_router.py`、`test_engine_navigation.py`、`main.py --check` |
 | Agent Skill | `skills/heuristic-teacher/SKILL.md` | ✅ 已建立 | 独立于产品文档，包含工作流与验证标准 |
 | CI | `.github/workflows/tests.yml` | ✅ 通过 | GitHub Actions `Tests` workflow 已跑绿 |
 

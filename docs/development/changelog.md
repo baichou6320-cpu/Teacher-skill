@@ -29,6 +29,7 @@
 - 新增 GitHub Actions 单测工作流：`.github/workflows/tests.yml`。
 - GitHub Actions `Tests` workflow 已通过 ✅。
 - 校准 `.env.example` 与 `config.yaml`：`.env` 只保留 API Key 和可选 base_url，模型与生成参数统一由 `config.yaml` 管理。
+- 拆分 `main.py`：将启动初始化/环境检查迁移到 `src/cli/environment.py`，将 Rich 控制台渲染迁移到 `src/cli/display.py`，将复习模式 CLI 流程与统计迁移到 `src/cli/review.py`；`main.py` 保留入口、应用编排和兼容包装。
 
 **文档**
 - README 精简为项目入口页。

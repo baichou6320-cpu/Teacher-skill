@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" role="img" aria-labelledby="title desc">
+  <title id="title">Heuristic Teacher icon</title>
+  <desc id="desc">A book, question mark, and circular arrow representing active recall learning.</desc>
+  <rect width="400" height="400" rx="88" fill="#0F766E"/>
+  <circle cx="302" cy="98" r="38" fill="#F59E0B"/>
+  <path d="M108 128h84c26 0 48 22 48 48v122c0 10-8 18-18 18H108c-22 0-40-18-40-40V168c0-22 18-40 40-40Z" fill="#ECFEFF"/>
+  <path d="M292 128h-84c-26 0-48 22-48 48v122c0 10 8 18 18 18h114c22 0 40-18 40-40V168c0-22-18-40-40-40Z" fill="#CCFBF1"/>
+  <path d="M200 162v146" stroke="#0F766E" stroke-width="18" stroke-linecap="round"/>
+  <path d="M108 172h58M108 216h58M234 172h58M234 216h58" stroke="#115E59" stroke-width="16" stroke-linecap="round"/>
+  <path d="M256 272c40-8 70-44 70-87" fill="none" stroke="#F59E0B" stroke-width="18" stroke-linecap="round"/>
+  <path d="M326 185l-25 16 29 12" fill="none" stroke="#F59E0B" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="200" y="112" text-anchor="middle" font-family="Arial, sans-serif" font-size="82" font-weight="700" fill="#FFFFFF">?</text>
+</svg>

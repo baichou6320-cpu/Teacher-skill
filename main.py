@@ -2,12 +2,16 @@
 from __future__ import annotations
 
 import argparse
-import builtins
 import importlib.util
 import os
-import re
-import shutil
 import sys
+from datetime import datetime
+from pathlib import Path
+from typing import Mapping
+
+from src.cli import display as cli_display
+from src.cli import environment as cli_environment
+from src.cli import review as cli_review
 
 # Fix Windows console UTF-8 encoding without replacing pytest capture streams.
 if sys.platform == "win32":
@@ -17,10 +21,6 @@ if sys.platform == "win32":
     except (AttributeError, ValueError):
         pass
 
-from datetime import datetime
-from pathlib import Path
-from typing import Mapping
-
 try:
     from dotenv import load_dotenv
 except ModuleNotFoundError:
@@ -28,85 +28,15 @@ except ModuleNotFoundError:
         """Fallback when python-dotenv is not installed yet."""
         return False
 
-try:
-    from rich.console import Console
-    from rich.markup import escape
-    from rich.panel import Panel
-    from rich.progress import Progress, SpinnerColumn, TextColumn
-    from rich.table import Table
-except ModuleNotFoundError:
-    def _strip_markup(value: str) -> str:
-        return re.sub(r"\[/?[a-zA-Z][^\]]*\]", "", value)
-
-    def escape(value: object) -> str:
-        """Minimal markup escape fallback used before dependencies are installed."""
-        return str(value)
-
-    class Console:
-        """Small console fallback so `--check` can run before rich is installed."""
-
-        def print(self, *objects, **kwargs) -> None:
-            builtins.print(*(_strip_markup(str(obj)) for obj in objects))
-
-        def input(self, prompt: str = "") -> str:
-            return builtins.input(prompt)
-
-    class Panel:
-        """Fallback Panel that renders plain text."""
-
-        @staticmethod
-        def fit(renderable, *args, **kwargs):
-            return renderable
-
-    class Table:
-        """Fallback Table that renders rows as plain text."""
-
-        def __init__(self, title: str | None = None, *args, **kwargs):
-            self.title = title
-            self.columns: list[str] = []
-            self.rows: list[tuple[str, ...]] = []
-
-        def add_column(self, header: str, *args, **kwargs) -> None:
-            self.columns.append(header)
-
-        def add_row(self, *values: object) -> None:
-            self.rows.append(tuple(str(value) for value in values))
-
-        def __str__(self) -> str:
-            lines: list[str] = []
-            if self.title:
-                lines.append(self.title)
-            if self.columns:
-                lines.append(" | ".join(self.columns))
-                lines.append("-" * max(8, len(lines[-1])))
-            lines.extend(" | ".join(row) for row in self.rows)
-            return "\n".join(lines)
-
-    class Progress:
-        """No-op fallback for rich Progress."""
-
-        def __init__(self, *args, **kwargs):
-            pass
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *args):
-            return False
-
-        def add_task(self, *args, **kwargs):
-            return 0
-
-    class SpinnerColumn:
-        pass
-
-    class TextColumn:
-        def __init__(self, *args, **kwargs):
-            pass
-
 load_dotenv()
 
-console = Console()
+console = cli_display.console
+escape = cli_display.escape
+Panel = cli_display.Panel
+Table = cli_display.Table
+Progress = cli_display.Progress
+SpinnerColumn = cli_display.SpinnerColumn
+TextColumn = cli_display.TextColumn
 DEMO_MATERIAL_PATH = Path(__file__).resolve().parent / "samples" / "demo_article.md"
 PROJECT_ROOT = Path(__file__).resolve().parent
 _RUNTIME_DEPENDENCIES_LOADED = False
@@ -140,356 +70,67 @@ def collect_environment_checks(
     project_root: Path | None = None,
 ) -> tuple[list[dict[str, object]], bool]:
     """Collect startup checks without entering the learning flow."""
-    env = env or os.environ
-    project_root = project_root or PROJECT_ROOT
-    checks: list[dict[str, object]] = []
-
-    def add(
-        name: str,
-        passed: bool,
-        detail: str,
-        *,
-        required: bool = True,
-    ) -> None:
-        checks.append(
-            {
-                "name": name,
-                "passed": passed,
-                "required": required,
-                "detail": detail,
-            }
-        )
-
-    add(
-        "Python 版本",
-        sys.version_info >= (3, 10),
-        f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}；需要 3.10+",
+    return cli_environment.collect_environment_checks(
+        env=env,
+        project_root=project_root or PROJECT_ROOT,
     )
-
-    env_file = project_root / ".env"
-    add(
-        ".env 文件",
-        env_file.exists(),
-        ".env 存在" if env_file.exists() else "未找到 .env；可从 .env.example 复制一份",
-        required=False,
-    )
-
-    api_key = (env.get("ANTHROPIC_API_KEY") or "").strip()
-    if not api_key and env_file.exists():
-        api_key = _read_env_file_value(env_file, "ANTHROPIC_API_KEY")
-    add(
-        "ANTHROPIC_API_KEY",
-        bool(api_key and api_key != "your_api_key_here"),
-        "已配置" if api_key and api_key != "your_api_key_here" else "未配置或仍是占位值",
-    )
-
-    config_info = inspect_config_file(project_root)
-    add(
-        "config.yaml",
-        config_info["passed"],
-        config_info["detail"],
-    )
-    add(
-        "数据目录配置",
-        bool(config_info["data_dir"] and config_info["logs_dir"]),
-        f"data_dir={config_info['data_dir']}；logs_dir={config_info['logs_dir']}",
-    )
-
-    demo_path = project_root / "samples" / "demo_article.md"
-    add(
-        "Demo 示例材料",
-        demo_path.exists(),
-        str(demo_path.relative_to(project_root)) if demo_path.exists() else "缺少 samples/demo_article.md",
-    )
-
-    runtime_modules = {
-        "anthropic": "anthropic",
-        "pydantic": "pydantic",
-        "python-dotenv": "dotenv",
-        "pypdf": "pypdf",
-        "rich": "rich",
-        "PyYAML": "yaml",
-    }
-    missing_runtime = [
-        package
-        for package, module_name in runtime_modules.items()
-        if importlib.util.find_spec(module_name) is None
-    ]
-    add(
-        "运行依赖",
-        not missing_runtime,
-        "已安装" if not missing_runtime else "缺少：" + ", ".join(missing_runtime),
-    )
-
-    test_modules = {
-        "pytest": "pytest",
-        "pytest-mock": "pytest_mock",
-        "freezegun": "freezegun",
-    }
-    missing_test = [
-        package
-        for package, module_name in test_modules.items()
-        if importlib.util.find_spec(module_name) is None
-    ]
-    add(
-        "测试依赖",
-        not missing_test,
-        "已安装" if not missing_test else "缺少：" + ", ".join(missing_test),
-        required=False,
-    )
-
-    is_ready = all(
-        bool(check["passed"])
-        for check in checks
-        if bool(check["required"])
-    )
-    return checks, is_ready
 
 
 def _read_env_file_value(env_file: Path, key: str) -> str:
     """Read one simple KEY=value entry from .env without python-dotenv."""
-    try:
-        for line in env_file.read_text(encoding="utf-8").splitlines():
-            stripped = line.strip()
-            if not stripped or stripped.startswith("#") or "=" not in stripped:
-                continue
-            name, value = stripped.split("=", 1)
-            if name.strip() == key:
-                return value.strip().strip('"').strip("'")
-    except OSError:
-        return ""
-    return ""
+    return cli_environment.read_env_file_value(env_file, key)
 
 
 def inspect_config_file(project_root: Path | None = None) -> dict[str, object]:
     """Inspect config.yaml, falling back to a stdlib parser if deps are missing."""
-    project_root = project_root or PROJECT_ROOT
-    config_path = project_root / "config.yaml"
-    if not config_path.exists():
-        return {
-            "passed": False,
-            "detail": "缺少 config.yaml",
-            "data_dir": "",
-            "logs_dir": "",
-        }
-
-    can_use_full_parser = (
-        importlib.util.find_spec("yaml") is not None
-        and importlib.util.find_spec("pydantic") is not None
-    )
-    if can_use_full_parser:
-        try:
-            import yaml
-            from src.utils.config import Config
-
-            with open(config_path, "r", encoding="utf-8") as f:
-                raw_config = yaml.safe_load(f) or {}
-            cfg = Config(**raw_config)
-            return {
-                "passed": bool(cfg.llm.model_id),
-                "detail": f"模型：{cfg.llm.model_id}；prompt_mode={cfg.teaching.prompt_mode}",
-                "data_dir": cfg.paths.data_dir,
-                "logs_dir": cfg.paths.logs_dir,
-            }
-        except Exception as exc:
-            return {
-                "passed": False,
-                "detail": f"读取失败：{exc}",
-                "data_dir": "",
-                "logs_dir": "",
-            }
-
-    sections = _read_simple_yaml_sections(config_path)
-    model_id = sections.get("llm", {}).get("model_id", "claude-sonnet-4-20250514")
-    prompt_mode = sections.get("teaching", {}).get("prompt_mode", "split")
-    data_dir = sections.get("paths", {}).get("data_dir", "./data")
-    logs_dir = sections.get("paths", {}).get("logs_dir", "./logs")
-    return {
-        "passed": bool(model_id),
-        "detail": f"模型：{model_id}；prompt_mode={prompt_mode}（轻量解析）",
-        "data_dir": data_dir,
-        "logs_dir": logs_dir,
-    }
+    return cli_environment.inspect_config_file(project_root or PROJECT_ROOT)
 
 
 def initialize_project(
     project_root: Path | None = None,
 ) -> tuple[list[dict[str, str]], bool]:
     """Prepare first-run local files without requiring runtime dependencies."""
-    project_root = project_root or PROJECT_ROOT
-    actions: list[dict[str, str]] = []
-
-    def add(item: str, status: str, detail: str) -> None:
-        actions.append({"item": item, "status": status, "detail": detail})
-
-    env_file = project_root / ".env"
-    env_example = project_root / ".env.example"
-    if env_file.exists():
-        add(".env", "已存在", "保留现有 .env，不覆盖")
-    elif env_example.exists():
-        shutil.copyfile(env_example, env_file)
-        add(".env", "已创建", "已从 .env.example 复制；请填写 ANTHROPIC_API_KEY")
-    else:
-        add(".env", "失败", "缺少 .env.example，无法自动创建")
-
-    data_dir, logs_dir = _read_runtime_dirs_from_config(project_root)
-    for label, directory in (("数据目录", data_dir), ("日志目录", logs_dir)):
-        directory.mkdir(parents=True, exist_ok=True)
-        add(label, "已准备", _format_project_path(project_root, directory))
-
-    sample_path = project_root / "samples" / "demo_article.md"
-    add(
-        "Demo 示例材料",
-        "可用" if sample_path.exists() else "缺失",
-        _format_project_path(project_root, sample_path)
-        if sample_path.exists()
-        else "缺少 samples/demo_article.md",
-    )
-
-    is_ok = all(action["status"] != "失败" for action in actions)
-    return actions, is_ok
+    return cli_environment.initialize_project(project_root or PROJECT_ROOT)
 
 
 def _read_runtime_dirs_from_config(project_root: Path) -> tuple[Path, Path]:
     """Read data/log dirs from config.yaml with a tiny stdlib parser."""
-    config_path = project_root / "config.yaml"
-    sections = _read_simple_yaml_sections(config_path)
-    data_dir = sections.get("paths", {}).get("data_dir", "./data")
-    logs_dir = sections.get("paths", {}).get("logs_dir", "./logs")
-
-    return _resolve_project_path(project_root, data_dir), _resolve_project_path(project_root, logs_dir)
+    return cli_environment.read_runtime_dirs_from_config(project_root)
 
 
 def _read_simple_yaml_sections(config_path: Path) -> dict[str, dict[str, str]]:
     """Read simple top-level YAML sections containing scalar key/value pairs."""
-    sections: dict[str, dict[str, str]] = {}
-    current_section: str | None = None
-
-    try:
-        lines = config_path.read_text(encoding="utf-8").splitlines()
-    except OSError:
-        return sections
-
-    for line in lines:
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        if line and not line.startswith((" ", "\t")):
-            current_section = stripped[:-1].strip() if stripped.endswith(":") else None
-            if current_section:
-                sections.setdefault(current_section, {})
-            continue
-        if not current_section or ":" not in stripped:
-            continue
-
-        key, value = stripped.split(":", 1)
-        value = value.split("#", 1)[0].strip().strip('"').strip("'")
-        if value:
-            sections[current_section][key.strip()] = value
-
-    return sections
+    return cli_environment.read_simple_yaml_sections(config_path)
 
 
 def _resolve_project_path(project_root: Path, value: str) -> Path:
     """Resolve config paths relative to the project root."""
-    path = Path(value).expanduser()
-    if path.is_absolute():
-        return path
-    return project_root / path
+    return cli_environment.resolve_project_path(project_root, value)
 
 
 def _format_project_path(project_root: Path, path: Path) -> str:
     """Format paths relative to the project root when possible."""
-    try:
-        return str(path.relative_to(project_root))
-    except ValueError:
-        return str(path)
+    return cli_environment.format_project_path(project_root, path)
 
 
 def run_project_init() -> bool:
     """Render first-run initialization actions."""
-    actions, is_ok = initialize_project()
-    table = Table(title="项目初始化")
-    table.add_column("项目", style="cyan")
-    table.add_column("状态", width=10)
-    table.add_column("说明", style="white")
-
-    for action in actions:
-        status = action["status"]
-        if status in ("已创建", "已准备", "可用"):
-            rendered_status = "[green]" + status + "[/green]"
-        elif status == "已存在":
-            rendered_status = "[yellow]" + status + "[/yellow]"
-        else:
-            rendered_status = "[red]" + status + "[/red]"
-        table.add_row(action["item"], rendered_status, action["detail"])
-
-    console.print(table)
-    if is_ok:
-        console.print(
-            Panel.fit(
-                "[bold green]初始化完成。[/bold green]\n\n"
-                "下一步：\n"
-                "1. 打开 `.env`，填写 `ANTHROPIC_API_KEY`\n"
-                "2. 运行 `python main.py --check`\n"
-                "3. 运行 `python main.py --demo`",
-                border_style="green",
-            )
-        )
-    else:
-        console.print(
-            Panel.fit(
-                "[bold yellow]初始化没有完全成功。[/bold yellow]\n\n"
-                "请先处理失败项，然后再次运行 `python main.py --init`。",
-                border_style="yellow",
-            )
-        )
-    return is_ok
+    return cli_environment.render_project_init(
+        PROJECT_ROOT,
+        output_console=console,
+        table_cls=Table,
+        panel_cls=Panel,
+    )
 
 
 def run_environment_check() -> bool:
     """Render environment checks and return whether the app can start."""
-    checks, is_ready = collect_environment_checks()
-    table = Table(title="启动环境检查")
-    table.add_column("项目", style="cyan")
-    table.add_column("结果", width=10)
-    table.add_column("说明", style="white")
-
-    for check in checks:
-        passed = bool(check["passed"])
-        required = bool(check["required"])
-        if passed:
-            result = "[green]通过[/green]"
-        elif required:
-            result = "[red]需处理[/red]"
-        else:
-            result = "[yellow]建议[/yellow]"
-        table.add_row(str(check["name"]), result, str(check["detail"]))
-
-    console.print(table)
-    if is_ready:
-        console.print(
-            Panel.fit(
-                "[bold green]环境可以启动 Teacher-skill。[/bold green]\n\n"
-                "下一步可以运行：\n"
-                "[green]python main.py --demo[/green]\n"
-                "或：\n"
-                "[green]python main.py --file article.md[/green]",
-                border_style="green",
-            )
-        )
-    else:
-        console.print(
-            Panel.fit(
-                "[bold yellow]环境还没准备好。[/bold yellow]\n\n"
-                "优先处理红色项目；常见修复：\n"
-                "1. 复制 `.env.example` 为 `.env`\n"
-                "2. 填写 `ANTHROPIC_API_KEY`\n"
-                "3. 运行 `pip install -r requirements.txt`",
-                border_style="yellow",
-            )
-        )
-    return is_ready
+    return cli_environment.render_environment_check(
+        PROJECT_ROOT,
+        output_console=console,
+        table_cls=Table,
+        panel_cls=Panel,
+    )
 
 
 class TeacherSkillApp:
@@ -691,63 +332,19 @@ class TeacherSkillApp:
 
     def _topic_display_title(self, topic_id: str, state: dict) -> str:
         """Return a readable topic title for history selection."""
-        title = str(state.get("title") or "").strip()
-        if title:
-            return title
-
-        source_path = str(state.get("source_path") or "").strip()
-        if source_path:
-            stem = Path(source_path).stem.strip()
-            if stem:
-                return stem
-
-        for chunk in state.get("chunks", []) or []:
-            chunk_title = str(chunk.get("title") or "").strip()
-            if chunk_title:
-                return chunk_title
-
-        return topic_id
+        return cli_display.topic_display_title(topic_id, state)
 
     def _topic_display_summary(self, state: dict) -> str:
         """Return a short readable topic summary for history selection."""
-        summary = str(state.get("summary") or "").strip()
-        if summary:
-            return summary[:100]
-
-        titles = [
-            str(chunk.get("title") or "").strip()
-            for chunk in state.get("chunks", []) or []
-            if str(chunk.get("title") or "").strip()
-        ]
-        if titles:
-            summary = "、".join(titles[:3])
-            if len(titles) > 3:
-                summary += " 等"
-            return summary[:100]
-
-        return ""
+        return cli_display.topic_display_summary(state)
 
     def _topic_source_label(self, state: dict) -> str:
         """Return a readable material source label."""
-        source_type = str(state.get("source_type") or "").strip()
-        source_path = str(state.get("source_path") or "").strip()
-        if source_type == "demo":
-            return "内置示例"
-        if source_path:
-            return f"文件 {Path(source_path).name}"
-        if source_type == "file":
-            return "文件"
-        return "手动输入"
+        return cli_display.topic_source_label(state)
 
     def _format_topic_time(self, state: dict) -> str:
         """Format topic timestamp for display."""
-        value = state.get("updated_at") or state.get("created_at")
-        if not value:
-            return ""
-        try:
-            return datetime.fromisoformat(str(value)).strftime("%Y-%m-%d %H:%M")
-        except ValueError:
-            return str(value)
+        return cli_display.format_topic_time(state)
 
     def _resume_topic(self, topic_id: str) -> None:
         """Resume an existing topic from its saved state."""
@@ -777,37 +374,15 @@ class TeacherSkillApp:
 
     def _review_topic(self, topic_id: str) -> None:
         """Start review mode for a previously learned topic."""
-        self.logger.info(f"Reviewing topic {topic_id}")
-        console.print(f"\n[cyan]正在进入复习模式：{topic_id}...[/cyan]")
-        state_data = self.storage.load_topic_state(topic_id)
-        history_data = self.storage.load_conversation_history(topic_id)
-
-        if not state_data:
-            self.logger.error(f"Failed to load topic state for review: {topic_id}")
-            console.print("[red]无法加载该主题的学习进度[/red]")
-            return
-
-        topic_state = TopicState.model_validate(state_data)
-        self.current_engine = TutorEngine(self.user_id, topic_id)
-        if history_data and history_data.get("messages"):
-            self.current_engine.restore_memory(history_data["messages"])
-
-        console.print(
-            Panel.fit(
-                f"[bold cyan]复习模式：{escape(topic_state.title or topic_id)}[/bold cyan]\n\n"
-                "本轮会优先提问待巩固、答错过或用过提示的知识点。\n"
-                "[dim]复习模式会直接提问，不重新讲解；可用 /direct 查看答案，/skip 跳过。[/dim]",
-                border_style="cyan",
-            )
+        return cli_review.review_topic(
+            self,
+            topic_id,
+            engine_factory=TutorEngine,
+            topic_state_model=TopicState,
+            output_console=console,
+            panel_cls=Panel,
+            escape_func=escape,
         )
-        response = self.current_engine.start_review(topic_state)
-        self._display_response(response)
-        if response.is_final:
-            self._finish_review_session(topic_state, self._new_review_stats())
-            return
-
-        self._review_loop(topic_state)
-        self._save_progress()
 
     def _start_new_topic(
         self,
@@ -1202,87 +777,16 @@ class TeacherSkillApp:
 
     def _review_loop(self, topic_state: TopicState) -> None:
         """Run review mode without re-teaching each chunk."""
-        self.logger.info(f"Review loop started: {topic_state.total_chunks} chunks")
-        review_stats = self._new_review_stats()
-
-        while True:
-            user_input = console.input("\n[bold blue复习>[/bold blue] ").strip()
-            if not user_input:
-                continue
-
-            lowered = user_input.lower()
-            if lowered in ("/help", "help"):
-                self._show_help()
-                continue
-
-            if lowered in ("/exit", "/quit", "exit", "quit"):
-                self.logger.info("User requested exit from review, saving progress")
-                self._save_progress()
-                console.print("[cyan]已保存复习进度，下次再见！[/cyan]")
-                sys.exit(0)
-
-            if lowered == "/direct":
-                response = self.current_engine.receive_answer("", is_direct=True)
-                self._record_review_result(review_stats, response, is_direct=True)
-                self._display_response(response)
-                if self._advance_review_or_finish():
-                    self._finish_review_session(topic_state, review_stats)
-                    break
-                continue
-
-            if lowered == "/progress":
-                self._show_progress()
-                continue
-
-            if lowered == "/list":
-                self._show_chunk_list()
-                continue
-
-            if lowered == "/review":
-                self._show_review_items()
-                continue
-
-            if lowered == "/history":
-                self._show_history_topics()
-                continue
-
-            if lowered == "/skip":
-                response = self.current_engine.skip_review_chunk()
-                self._record_review_result(review_stats, response, is_skipped=True)
-                self._display_response(response)
-                self._save_progress()
-                if response.is_final:
-                    self._finish_review_session(topic_state, review_stats)
-                    break
-                continue
-
-            if self._parse_load_command(user_input) is not None:
-                console.print("[yellow]复习模式暂不追加材料；请退出后用 /load 或 --file 学习新材料。[/yellow]")
-                continue
-
-            confirmed_answer = self._confirm_answer_submission(user_input)
-            if confirmed_answer is None:
-                continue
-
-            self.logger.debug(f"Review answer: {confirmed_answer[:50]}...")
-            response = self.current_engine.receive_answer(confirmed_answer, is_direct=False)
-            self._record_review_result(review_stats, response)
-            self._display_response(response)
-
-            if self._review_response_finishes_item(response):
-                if self._advance_review_or_finish():
-                    self._finish_review_session(topic_state, review_stats)
-                    break
+        return cli_review.run_review_loop(
+            self,
+            topic_state,
+            output_console=console,
+            sys_module=sys,
+        )
 
     def _new_review_stats(self) -> dict[str, int]:
         """Create counters for one review session."""
-        return {
-            "answered": 0,
-            "correct": 0,
-            "direct": 0,
-            "skipped": 0,
-            "kept_review": 0,
-        }
+        return cli_review.new_review_stats()
 
     def _record_review_result(
         self,
@@ -1293,46 +797,23 @@ class TeacherSkillApp:
         is_skipped: bool = False,
     ) -> None:
         """Update review-session counters from one user action."""
-        if is_skipped:
-            stats["skipped"] += 1
-            stats["kept_review"] += 1
-            return
-
-        if is_direct:
-            stats["direct"] += 1
-            stats["kept_review"] += 1
-            return
-
-        stats["answered"] += 1
-        if response.response_type == ResponseType.FEEDBACK_CORRECT:
-            stats["correct"] += 1
-            return
-
-        if response.is_final and response.response_type in (
-            ResponseType.FEEDBACK_WRONG,
-            ResponseType.FEEDBACK_HINT,
-        ):
-            stats["kept_review"] += 1
+        return cli_review.record_review_result(
+            stats,
+            response,
+            is_direct=is_direct,
+            is_skipped=is_skipped,
+        )
 
     def _review_response_finishes_item(self, response: AIMessage) -> bool:
         """Return whether a review response should move to the next review item."""
-        return response.response_type in (
-            ResponseType.FEEDBACK_CORRECT,
-            ResponseType.DIRECT_ANSWER,
-        ) or (
-            response.is_final
-            and response.response_type
-            in (ResponseType.FEEDBACK_WRONG, ResponseType.FEEDBACK_HINT)
-        )
+        return cli_review.review_response_finishes_item(response)
 
     def _advance_review_or_finish(self) -> bool:
         """Move to the next review item.
 
         Returns True when the review queue is complete.
         """
-        response = self.current_engine.next_review_chunk()
-        self._display_response(response)
-        return response.is_final
+        return cli_review.advance_review_or_finish(self)
 
     def _finish_review_session(
         self,
@@ -1340,9 +821,7 @@ class TeacherSkillApp:
         review_stats: dict[str, int],
     ) -> None:
         """Show review summary and persist review metadata."""
-        self._show_review_summary(topic_state, review_stats)
-        self._record_review_completion(topic_state)
-        self._save_progress()
+        return cli_review.finish_review_session(self, topic_state, review_stats)
 
     def _confirm_answer_submission(self, answer: str) -> str | None:
         """Ask the user to confirm, edit, or cancel an answer before judging."""
@@ -1428,85 +907,24 @@ class TeacherSkillApp:
 
     def _display_response(self, response: AIMessage) -> None:
         """Render an AIMessage to the console."""
-        console.print()
-
-        match response.response_type:
-            case ResponseType.EXPLANATION:
-                console.print(f"[cyan]{response.content}[/cyan]")
-            case ResponseType.QUESTION:
-                console.print(f"[bold yellow]📝 {response.question}[/bold yellow]")
-                if response.options:
-                    for opt in response.options:
-                        console.print(f"  {opt}")
-                console.print(f"\n[dim]进度: {self.current_engine.get_progress()}[/dim]")
-            case ResponseType.FEEDBACK_CORRECT:
-                console.print(f"[green]✅ {response.content}[/green]")
-            case ResponseType.FEEDBACK_WRONG | ResponseType.FEEDBACK_HINT:
-                self._display_supportive_feedback(response)
-            case ResponseType.DIRECT_ANSWER:
-                console.print(
-                    Panel.fit(
-                        f"[bold yellow]【速查模式】[/bold yellow]\n\n{response.content}",
-                        border_style="yellow",
-                    )
-                )
+        return cli_display.display_response(
+            response,
+            current_engine=self.current_engine,
+            supportive_feedback_renderer=self._display_supportive_feedback,
+            output_console=console,
+        )
 
     def _display_supportive_feedback(self, response: AIMessage) -> None:
         """Render wrong-answer feedback without making the user feel punished."""
-        hint_level = max(0, min(response.hint_level, 4))
-        title = "还差一点，我们换个角度试试"
-        if hint_level >= 4:
-            title = "这一题先放进待巩固，我们保留节奏继续前进"
-
-        details = []
-        if hint_level > 0:
-            details.append(
-                f"提示层级：第 {hint_level}/4 层（{self._hint_level_label(hint_level)}）"
-            )
-        details.append("你可以继续尝试；想先看答案可输入 /direct，系统会标记为待巩固。")
-
-        console.print(
-            Panel.fit(
-                f"[bold yellow]{title}[/bold yellow]\n\n"
-                f"{escape(response.content)}\n\n"
-                f"[dim]{escape(' · '.join(details))}[/dim]",
-                border_style="yellow",
-            )
-        )
+        return cli_display.display_supportive_feedback(response, output_console=console)
 
     def _hint_level_label(self, hint_level: int) -> str:
         """Return a human-readable label for progressive hint levels."""
-        labels = {
-            1: "线索提示",
-            2: "生活类比",
-            3: "半解析",
-            4: "关键词/部分答案",
-        }
-        return labels.get(hint_level, "渐进提示")
+        return cli_display.hint_level_label(hint_level)
 
     def _show_analysis_result(self, topic_state: TopicState) -> None:
         """Display the result of material analysis."""
-        console.print(
-            Panel.fit(
-                f"[bold green]✅ 材料分析完成！[/bold green]\n\n"
-                f"主题：{escape(topic_state.title or topic_state.topic_id)}\n"
-                f"摘要：{escape(topic_state.summary or '暂无')}\n"
-                f"来源：{escape(self._topic_source_label(topic_state.model_dump(mode='json')))}\n"
-                f"知识点数量：{topic_state.total_chunks} 个",
-                border_style="green",
-            )
-        )
-
-        table = Table(title="📚 知识卡片预览")
-        table.add_column("序号", style="cyan", width=4)
-        table.add_column("标题", style="white")
-        table.add_column("难度", style="yellow", width=8)
-
-        for i, chunk in enumerate(topic_state.chunks):
-            table.add_row(str(i + 1), chunk.title or "未命名", chunk.difficulty)
-
-        console.print(table)
-        console.print()
+        return cli_display.show_analysis_result(topic_state, output_console=console)
 
     def _show_append_result(
         self,
@@ -1515,174 +933,39 @@ class TeacherSkillApp:
         source_label: str,
     ) -> None:
         """Display appended chunks and make it clear the current question continues."""
-        console.print(
-            Panel.fit(
-                f"[bold green]✅ 已追加材料[/bold green]\n\n"
-                f"来源：{source_label}\n"
-                f"新增知识点：{len(new_chunks)} 个\n"
-                f"当前主题总知识点：{previous_total + len(new_chunks)} 个\n\n"
-                "[dim]当前题目不会被打断，答完后会继续进入后续知识点。[/dim]",
-                border_style="green",
-            )
+        return cli_display.show_append_result(
+            new_chunks,
+            previous_total,
+            source_label,
+            output_console=console,
         )
-
-        table = Table(title="📚 新增知识卡片")
-        table.add_column("序号", style="cyan", width=4)
-        table.add_column("标题", style="white")
-        table.add_column("难度", style="yellow", width=8)
-
-        for i, chunk in enumerate(new_chunks, previous_total + 1):
-            table.add_row(str(i), chunk.title or "未命名", chunk.difficulty)
-
-        console.print(table)
-        console.print()
 
     def _show_progress(self) -> None:
         """Display current learning progress."""
-        if not self.current_engine or not self.current_engine.topic_state:
-            return
-
-        ts = self.current_engine.topic_state
-        mastered = sum(1 for c in ts.chunks if c.status == LearningStatus.MASTERED)
-        needs_review = sum(1 for c in ts.chunks if c.status == LearningStatus.NEEDS_REVIEW)
-        not_started = sum(1 for c in ts.chunks if c.status == LearningStatus.NOT_STARTED)
-        attempts = sum(c.attempts for c in ts.chunks)
-        wrong = sum(c.fail_count for c in ts.chunks)
-        current = ts.chunks[ts.current_chunk_index] if ts.chunks and ts.current_chunk_index < len(ts.chunks) else None
-        review_progress = (
-            self.current_engine.get_review_progress()
-            if hasattr(self.current_engine, "get_review_progress")
-            else "未开始"
-        )
-        review_line = (
-            f"\n复习进度: [cyan]{review_progress}[/cyan]"
-            if review_progress != "未开始"
-            else ""
-        )
-        console.print(
-            Panel.fit(
-                f"[bold]当前进度[/bold]\n\n"
-                f"知识点: {ts.current_chunk_index + 1}/{ts.total_chunks}\n"
-                f"当前: {current.title if current else '无'}\n"
-                f"已掌握: [green]{mastered}[/green]\n"
-                f"待巩固: [yellow]{needs_review}[/yellow]\n"
-                f"未开始: {not_started}\n"
-                f"本主题作答: {attempts} 次，答错: {wrong} 次\n"
-                f"状态: {ts.is_completed and '已完成' or '进行中'}"
-                f"{review_line}",
-                border_style="cyan",
-            )
-        )
+        return cli_display.show_progress(self.current_engine, output_console=console)
 
     def _format_chunk_status(self, chunk: ChunkState) -> str:
         """Return a human-readable learning status."""
-        status_map = {
-            LearningStatus.NOT_STARTED: "未开始",
-            LearningStatus.IN_PROGRESS: "学习中",
-            LearningStatus.MASTERED: "已掌握",
-            LearningStatus.NEEDS_REVIEW: "待巩固",
-        }
-        return status_map.get(chunk.status, str(chunk.status))
+        return cli_display.format_chunk_status(chunk)
 
     def _show_chunk_list(self) -> None:
         """Display all chunks in the current topic."""
-        if not self.current_engine or not self.current_engine.topic_state:
-            console.print("[yellow]当前没有进行中的学习主题[/yellow]")
-            return
-
-        ts = self.current_engine.topic_state
-        table = Table(title="📚 知识点列表")
-        table.add_column("当前", width=4)
-        table.add_column("序号", style="cyan", width=4)
-        table.add_column("标题", style="white")
-        table.add_column("状态", style="yellow", width=8)
-        table.add_column("答错", width=6)
-        table.add_column("提示", width=6)
-
-        for i, chunk in enumerate(ts.chunks, 1):
-            table.add_row(
-                "→" if i - 1 == ts.current_chunk_index else "",
-                str(i),
-                chunk.title or "未命名",
-                self._format_chunk_status(chunk),
-                str(chunk.fail_count),
-                str(chunk.hint_level),
-            )
-
-        console.print(table)
-        console.print("[dim]可用 /jump <序号> 跳转到指定知识点。[/dim]")
+        return cli_display.show_chunk_list(self.current_engine, output_console=console)
 
     def _show_review_items(self) -> None:
         """Display chunks that need review."""
-        if not self.current_engine or not self.current_engine.topic_state:
-            console.print("[yellow]当前没有进行中的学习主题[/yellow]")
-            return
-
-        ts = self.current_engine.topic_state
-        review_items = [
-            (i, chunk)
-            for i, chunk in enumerate(ts.chunks, 1)
-            if chunk.status == LearningStatus.NEEDS_REVIEW
-            or chunk.fail_count > 0
-            or chunk.hint_level > 0
-        ]
-
-        if not review_items:
-            console.print("[green]当前没有待巩固知识点。[/green]")
-            return
-
-        table = Table(title="🟡 待巩固知识点")
-        table.add_column("序号", style="cyan", width=4)
-        table.add_column("标题", style="white")
-        table.add_column("状态", style="yellow", width=8)
-        table.add_column("答错", width=6)
-        table.add_column("提示", width=6)
-
-        for i, chunk in review_items:
-            table.add_row(
-                str(i),
-                chunk.title or "未命名",
-                self._format_chunk_status(chunk),
-                str(chunk.fail_count),
-                str(chunk.hint_level),
-            )
-
-        console.print(table)
-        console.print("[dim]可用 /jump <序号> 回到对应知识点。[/dim]")
+        return cli_display.show_review_items(self.current_engine, output_console=console)
 
     def _show_history_topics(self) -> None:
         """Display archived learning topics from the user profile."""
-        profile = self._load_or_create_profile()
-        if not profile.history_topics:
-            console.print("[yellow]还没有历史学习记录。完成一个主题后会自动归档到这里。[/yellow]")
-            return
-
-        table = Table(title="📚 历史学习记录")
-        table.add_column("序号", style="cyan", width=4)
-        table.add_column("主题", style="white")
-        table.add_column("掌握", style="green", width=8)
-        table.add_column("待巩固", style="yellow", width=8)
-        table.add_column("完成时间", style="dim", width=16)
-        table.add_column("上次复习", style="dim", width=16)
-
-        for i, topic in enumerate(profile.history_topics, 1):
-            table.add_row(
-                str(i),
-                escape(topic.title or topic.topic_id),
-                f"{topic.mastered_chunks}/{topic.total_chunks}",
-                str(topic.review_chunks),
-                topic.completed_at.strftime("%Y-%m-%d %H:%M"),
-                self._format_optional_time(topic.last_reviewed_at),
-            )
-
-        console.print(table)
-        console.print("[dim]后续复习模式会优先使用这些历史记录和待巩固知识点。[/dim]")
+        return cli_display.show_history_topics(
+            self._load_or_create_profile(),
+            output_console=console,
+        )
 
     def _format_optional_time(self, value: datetime | None) -> str:
         """Format an optional datetime for compact tables."""
-        if not value:
-            return "未复习"
-        return value.strftime("%Y-%m-%d %H:%M")
+        return cli_display.format_optional_time(value)
 
     def _match_review_topic(self, user_input: str) -> LearnedTopic | None:
         """Match a natural-language review request to an archived topic."""
@@ -1692,45 +975,13 @@ class TeacherSkillApp:
 
     def _show_help(self) -> None:
         """Display available commands."""
-        help_text = """
-[bold]可用命令：[/bold]
-
-  /help     - 显示此帮助
-  /progress - 显示当前进度、掌握数、待巩固数和答题统计
-  /list     - 查看全部知识点
-  /review   - 查看待巩固知识点
-  /history  - 查看已归档的历史学习主题
-  /skip     - 跳过当前知识点，并标记为待巩固
-  /back     - 回到上一个知识点
-  /jump N   - 跳到第 N 个知识点，例如 /jump 3
-  /direct   - 速查模式：直接查看答案（标记为待巩固）
-  /load     - 加载文件；学习中使用会追加为新的知识点
-  /exit     - 退出并保存进度
-
-  快速体验：python main.py --demo
-  文件学习：python main.py --file article.md
-  复习入口：在主题选择时输入“复习一下 主题名”
-  直接输入回答内容即可答题
-"""
-        console.print(Panel.fit(help_text, title="帮助", border_style="green"))
+        return cli_display.show_help(output_console=console)
 
     def _show_summary(self, topic_state: TopicState) -> None:
         """Display a learning summary at the end of a topic."""
-        mastered = sum(1 for c in topic_state.chunks if c.status == LearningStatus.MASTERED)
-        needs_review = sum(1 for c in topic_state.chunks if c.status == LearningStatus.NEEDS_REVIEW)
-        total = len(topic_state.chunks)
-
-        rate = mastered / total * 100 if total else 0
-
-        console.print(
-            Panel.fit(
-                f"[bold green]🎉 学习完成！[/bold green]\n\n"
-                f"主题: [cyan]{escape(topic_state.title or topic_state.topic_id)}[/cyan]\n"
-                f"掌握: [green]{mastered}[/green] / {total}\n"
-                f"待巩固: [yellow]{needs_review}[/yellow]\n"
-                f"完成率: [cyan]{rate:.0f}%[/cyan]",
-                border_style="green",
-            )
+        mastered, needs_review, total = cli_display.show_summary(
+            topic_state,
+            output_console=console,
         )
         self._archive_completed_topic(topic_state, mastered, needs_review, total)
         self._save_progress()
@@ -1741,114 +992,31 @@ class TeacherSkillApp:
         review_stats: dict[str, int],
     ) -> None:
         """Display a review-session summary report."""
-        total = len(topic_state.chunks)
-        mastered = sum(1 for c in topic_state.chunks if c.status == LearningStatus.MASTERED)
-        remaining_review = self._remaining_review_items(topic_state)
-        correct_rate = (
-            review_stats["correct"] / review_stats["answered"] * 100
-            if review_stats["answered"]
-            else 0
+        return cli_display.show_review_summary(
+            topic_state,
+            review_stats,
+            self._remaining_review_items(topic_state),
+            output_console=console,
         )
-
-        console.print(
-            Panel.fit(
-                f"[bold green]✅ 本轮复习完成[/bold green]\n\n"
-                f"主题: [cyan]{escape(topic_state.title or topic_state.topic_id)}[/cyan]\n"
-                f"当前掌握: [green]{mastered}[/green] / {total}\n"
-                f"仍待巩固: [yellow]{len(remaining_review)}[/yellow]\n"
-                f"本轮作答: {review_stats['answered']} 次\n"
-                f"答对: [green]{review_stats['correct']}[/green]"
-                f"（正确率 {correct_rate:.0f}%）\n"
-                f"速查: {review_stats['direct']} 次\n"
-                f"跳过: {review_stats['skipped']} 次\n"
-                f"本轮保留待巩固: [yellow]{review_stats['kept_review']}[/yellow]",
-                border_style="green",
-            )
-        )
-
-        if not remaining_review:
-            console.print("[green]这轮复习后没有仍需巩固的知识点。[/green]")
-            return
-
-        table = Table(title="🟡 复习后仍待巩固")
-        table.add_column("序号", style="cyan", width=4)
-        table.add_column("标题", style="white")
-        table.add_column("状态", style="yellow", width=8)
-        table.add_column("答错", width=6)
-        table.add_column("提示", width=6)
-
-        for i, chunk in remaining_review[:8]:
-            table.add_row(
-                str(i),
-                escape(chunk.title or "未命名"),
-                self._format_chunk_status(chunk),
-                str(chunk.fail_count),
-                str(chunk.hint_level),
-            )
-
-        console.print(table)
-        if len(remaining_review) > 8:
-            console.print(f"[dim]还有 {len(remaining_review) - 8} 个待巩固知识点未显示。[/dim]")
 
     def _remaining_review_items(
         self,
         topic_state: TopicState,
     ) -> list[tuple[int, ChunkState]]:
         """Return chunks that still need attention after a review session."""
-        return [
-            (i, chunk)
-            for i, chunk in enumerate(topic_state.chunks, 1)
-            if self._chunk_still_needs_review(chunk)
-        ]
+        return cli_review.remaining_review_items(self, topic_state)
 
     def _chunk_still_needs_review(self, chunk: ChunkState) -> bool:
         """Decide whether a chunk remains weak after the current review."""
-        if chunk.status == LearningStatus.NEEDS_REVIEW:
-            return True
-        return chunk.status != LearningStatus.MASTERED and (
-            chunk.fail_count > 0 or chunk.hint_level > 0
-        )
+        return cli_review.chunk_still_needs_review(chunk)
 
     def _record_review_completion(self, topic_state: TopicState) -> None:
         """Update history metadata after a review session finishes."""
-        profile = self._load_or_create_profile()
-        now = datetime.now()
-        total = len(topic_state.chunks)
-        mastered = sum(1 for c in topic_state.chunks if c.status == LearningStatus.MASTERED)
-        needs_review = len(self._remaining_review_items(topic_state))
-
-        for topic in profile.history_topics:
-            if topic.topic_id == topic_state.topic_id:
-                topic.title = topic_state.title or topic.title or topic.topic_id
-                topic.summary = topic_state.summary or topic.summary
-                topic.total_chunks = total
-                topic.mastered_chunks = mastered
-                topic.review_chunks = needs_review
-                topic.source_type = topic_state.source_type
-                topic.source_path = topic_state.source_path
-                topic.last_reviewed_at = now
-                break
-        else:
-            profile.history_topics.insert(
-                0,
-                LearnedTopic(
-                    topic_id=topic_state.topic_id,
-                    title=topic_state.title or topic_state.topic_id,
-                    summary=topic_state.summary,
-                    completed_at=topic_state.created_at,
-                    total_chunks=total,
-                    mastered_chunks=mastered,
-                    review_chunks=needs_review,
-                    source_type=topic_state.source_type,
-                    source_path=topic_state.source_path,
-                    last_reviewed_at=now,
-                ),
-            )
-
-        profile.total_topics = len(profile.history_topics)
-        profile.completed_topics = len(profile.history_topics)
-        profile.updated_at = now
-        self.storage.save_user_profile(profile.model_dump(mode="json"))
+        cli_review.record_review_completion(
+            self,
+            topic_state,
+            learned_topic_cls=LearnedTopic,
+        )
         console.print("[dim]已更新历史记录的复习时间和待巩固数量。[/dim]")
 
     def _load_or_create_profile(self) -> UserProfile:
