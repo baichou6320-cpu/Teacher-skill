@@ -1,6 +1,12 @@
 """Teacher-skill 唯一入口 — 控制 CLI 交互与初始化。"""
+from __future__ import annotations
+
 import argparse
+import builtins
+import importlib.util
 import os
+import re
+import shutil
 import sys
 
 # Fix Windows console UTF-8 encoding without replacing pytest capture streams.
@@ -13,38 +19,491 @@ if sys.platform == "win32":
 
 from datetime import datetime
 from pathlib import Path
+from typing import Mapping
 
-from dotenv import load_dotenv
-from rich.console import Console
-from rich.markup import escape
-from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, TextColumn
-from rich.table import Table
+try:
+    from dotenv import load_dotenv
+except ModuleNotFoundError:
+    def load_dotenv(*args, **kwargs) -> bool:
+        """Fallback when python-dotenv is not installed yet."""
+        return False
+
+try:
+    from rich.console import Console
+    from rich.markup import escape
+    from rich.panel import Panel
+    from rich.progress import Progress, SpinnerColumn, TextColumn
+    from rich.table import Table
+except ModuleNotFoundError:
+    def _strip_markup(value: str) -> str:
+        return re.sub(r"\[/?[a-zA-Z][^\]]*\]", "", value)
+
+    def escape(value: object) -> str:
+        """Minimal markup escape fallback used before dependencies are installed."""
+        return str(value)
+
+    class Console:
+        """Small console fallback so `--check` can run before rich is installed."""
+
+        def print(self, *objects, **kwargs) -> None:
+            builtins.print(*(_strip_markup(str(obj)) for obj in objects))
+
+        def input(self, prompt: str = "") -> str:
+            return builtins.input(prompt)
+
+    class Panel:
+        """Fallback Panel that renders plain text."""
+
+        @staticmethod
+        def fit(renderable, *args, **kwargs):
+            return renderable
+
+    class Table:
+        """Fallback Table that renders rows as plain text."""
+
+        def __init__(self, title: str | None = None, *args, **kwargs):
+            self.title = title
+            self.columns: list[str] = []
+            self.rows: list[tuple[str, ...]] = []
+
+        def add_column(self, header: str, *args, **kwargs) -> None:
+            self.columns.append(header)
+
+        def add_row(self, *values: object) -> None:
+            self.rows.append(tuple(str(value) for value in values))
+
+        def __str__(self) -> str:
+            lines: list[str] = []
+            if self.title:
+                lines.append(self.title)
+            if self.columns:
+                lines.append(" | ".join(self.columns))
+                lines.append("-" * max(8, len(lines[-1])))
+            lines.extend(" | ".join(row) for row in self.rows)
+            return "\n".join(lines)
+
+    class Progress:
+        """No-op fallback for rich Progress."""
+
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def add_task(self, *args, **kwargs):
+            return 0
+
+    class SpinnerColumn:
+        pass
+
+    class TextColumn:
+        def __init__(self, *args, **kwargs):
+            pass
 
 load_dotenv()
 
-from src.core.engine import TutorEngine, TutorState
-from src.utils.logger import get_logger
-from src.core.memory import ConversationMemory
-from src.utils.storage import TopicStorage
-from models.protocol import AIMessage, ResponseType
-from models.state import ChunkState, TopicState, LearningStatus
-from models.user import LearnedTopic, UserProfile
-
-
 console = Console()
+DEMO_MATERIAL_PATH = Path(__file__).resolve().parent / "samples" / "demo_article.md"
+PROJECT_ROOT = Path(__file__).resolve().parent
+_RUNTIME_DEPENDENCIES_LOADED = False
+
+
+def load_runtime_dependencies() -> None:
+    """Load non-stdlib modules needed for the actual learning runtime."""
+    global _RUNTIME_DEPENDENCIES_LOADED
+    global TutorEngine, TutorState, get_logger, ConversationMemory
+    global is_review_intent, match_history_topic, TopicStorage
+    global AIMessage, ResponseType, ChunkState, TopicState, LearningStatus
+    global LearnedTopic, UserProfile
+
+    if _RUNTIME_DEPENDENCIES_LOADED:
+        return
+
+    from src.core.engine import TutorEngine, TutorState
+    from src.utils.logger import get_logger
+    from src.core.memory import ConversationMemory
+    from src.core.router import is_review_intent, match_history_topic
+    from src.utils.storage import TopicStorage
+    from models.protocol import AIMessage, ResponseType
+    from models.state import ChunkState, TopicState, LearningStatus
+    from models.user import LearnedTopic, UserProfile
+
+    _RUNTIME_DEPENDENCIES_LOADED = True
+
+
+def collect_environment_checks(
+    env: Mapping[str, str] | None = None,
+    project_root: Path | None = None,
+) -> tuple[list[dict[str, object]], bool]:
+    """Collect startup checks without entering the learning flow."""
+    env = env or os.environ
+    project_root = project_root or PROJECT_ROOT
+    checks: list[dict[str, object]] = []
+
+    def add(
+        name: str,
+        passed: bool,
+        detail: str,
+        *,
+        required: bool = True,
+    ) -> None:
+        checks.append(
+            {
+                "name": name,
+                "passed": passed,
+                "required": required,
+                "detail": detail,
+            }
+        )
+
+    add(
+        "Python 版本",
+        sys.version_info >= (3, 10),
+        f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}；需要 3.10+",
+    )
+
+    env_file = project_root / ".env"
+    add(
+        ".env 文件",
+        env_file.exists(),
+        ".env 存在" if env_file.exists() else "未找到 .env；可从 .env.example 复制一份",
+        required=False,
+    )
+
+    api_key = (env.get("ANTHROPIC_API_KEY") or "").strip()
+    if not api_key and env_file.exists():
+        api_key = _read_env_file_value(env_file, "ANTHROPIC_API_KEY")
+    add(
+        "ANTHROPIC_API_KEY",
+        bool(api_key and api_key != "your_api_key_here"),
+        "已配置" if api_key and api_key != "your_api_key_here" else "未配置或仍是占位值",
+    )
+
+    config_info = inspect_config_file(project_root)
+    add(
+        "config.yaml",
+        config_info["passed"],
+        config_info["detail"],
+    )
+    add(
+        "数据目录配置",
+        bool(config_info["data_dir"] and config_info["logs_dir"]),
+        f"data_dir={config_info['data_dir']}；logs_dir={config_info['logs_dir']}",
+    )
+
+    demo_path = project_root / "samples" / "demo_article.md"
+    add(
+        "Demo 示例材料",
+        demo_path.exists(),
+        str(demo_path.relative_to(project_root)) if demo_path.exists() else "缺少 samples/demo_article.md",
+    )
+
+    runtime_modules = {
+        "anthropic": "anthropic",
+        "pydantic": "pydantic",
+        "python-dotenv": "dotenv",
+        "pypdf": "pypdf",
+        "rich": "rich",
+        "PyYAML": "yaml",
+    }
+    missing_runtime = [
+        package
+        for package, module_name in runtime_modules.items()
+        if importlib.util.find_spec(module_name) is None
+    ]
+    add(
+        "运行依赖",
+        not missing_runtime,
+        "已安装" if not missing_runtime else "缺少：" + ", ".join(missing_runtime),
+    )
+
+    test_modules = {
+        "pytest": "pytest",
+        "pytest-mock": "pytest_mock",
+        "freezegun": "freezegun",
+    }
+    missing_test = [
+        package
+        for package, module_name in test_modules.items()
+        if importlib.util.find_spec(module_name) is None
+    ]
+    add(
+        "测试依赖",
+        not missing_test,
+        "已安装" if not missing_test else "缺少：" + ", ".join(missing_test),
+        required=False,
+    )
+
+    is_ready = all(
+        bool(check["passed"])
+        for check in checks
+        if bool(check["required"])
+    )
+    return checks, is_ready
+
+
+def _read_env_file_value(env_file: Path, key: str) -> str:
+    """Read one simple KEY=value entry from .env without python-dotenv."""
+    try:
+        for line in env_file.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#") or "=" not in stripped:
+                continue
+            name, value = stripped.split("=", 1)
+            if name.strip() == key:
+                return value.strip().strip('"').strip("'")
+    except OSError:
+        return ""
+    return ""
+
+
+def inspect_config_file(project_root: Path | None = None) -> dict[str, object]:
+    """Inspect config.yaml, falling back to a stdlib parser if deps are missing."""
+    project_root = project_root or PROJECT_ROOT
+    config_path = project_root / "config.yaml"
+    if not config_path.exists():
+        return {
+            "passed": False,
+            "detail": "缺少 config.yaml",
+            "data_dir": "",
+            "logs_dir": "",
+        }
+
+    can_use_full_parser = (
+        importlib.util.find_spec("yaml") is not None
+        and importlib.util.find_spec("pydantic") is not None
+    )
+    if can_use_full_parser:
+        try:
+            import yaml
+            from src.utils.config import Config
+
+            with open(config_path, "r", encoding="utf-8") as f:
+                raw_config = yaml.safe_load(f) or {}
+            cfg = Config(**raw_config)
+            return {
+                "passed": bool(cfg.llm.model_id),
+                "detail": f"模型：{cfg.llm.model_id}；prompt_mode={cfg.teaching.prompt_mode}",
+                "data_dir": cfg.paths.data_dir,
+                "logs_dir": cfg.paths.logs_dir,
+            }
+        except Exception as exc:
+            return {
+                "passed": False,
+                "detail": f"读取失败：{exc}",
+                "data_dir": "",
+                "logs_dir": "",
+            }
+
+    sections = _read_simple_yaml_sections(config_path)
+    model_id = sections.get("llm", {}).get("model_id", "claude-sonnet-4-20250514")
+    prompt_mode = sections.get("teaching", {}).get("prompt_mode", "split")
+    data_dir = sections.get("paths", {}).get("data_dir", "./data")
+    logs_dir = sections.get("paths", {}).get("logs_dir", "./logs")
+    return {
+        "passed": bool(model_id),
+        "detail": f"模型：{model_id}；prompt_mode={prompt_mode}（轻量解析）",
+        "data_dir": data_dir,
+        "logs_dir": logs_dir,
+    }
+
+
+def initialize_project(
+    project_root: Path | None = None,
+) -> tuple[list[dict[str, str]], bool]:
+    """Prepare first-run local files without requiring runtime dependencies."""
+    project_root = project_root or PROJECT_ROOT
+    actions: list[dict[str, str]] = []
+
+    def add(item: str, status: str, detail: str) -> None:
+        actions.append({"item": item, "status": status, "detail": detail})
+
+    env_file = project_root / ".env"
+    env_example = project_root / ".env.example"
+    if env_file.exists():
+        add(".env", "已存在", "保留现有 .env，不覆盖")
+    elif env_example.exists():
+        shutil.copyfile(env_example, env_file)
+        add(".env", "已创建", "已从 .env.example 复制；请填写 ANTHROPIC_API_KEY")
+    else:
+        add(".env", "失败", "缺少 .env.example，无法自动创建")
+
+    data_dir, logs_dir = _read_runtime_dirs_from_config(project_root)
+    for label, directory in (("数据目录", data_dir), ("日志目录", logs_dir)):
+        directory.mkdir(parents=True, exist_ok=True)
+        add(label, "已准备", _format_project_path(project_root, directory))
+
+    sample_path = project_root / "samples" / "demo_article.md"
+    add(
+        "Demo 示例材料",
+        "可用" if sample_path.exists() else "缺失",
+        _format_project_path(project_root, sample_path)
+        if sample_path.exists()
+        else "缺少 samples/demo_article.md",
+    )
+
+    is_ok = all(action["status"] != "失败" for action in actions)
+    return actions, is_ok
+
+
+def _read_runtime_dirs_from_config(project_root: Path) -> tuple[Path, Path]:
+    """Read data/log dirs from config.yaml with a tiny stdlib parser."""
+    config_path = project_root / "config.yaml"
+    sections = _read_simple_yaml_sections(config_path)
+    data_dir = sections.get("paths", {}).get("data_dir", "./data")
+    logs_dir = sections.get("paths", {}).get("logs_dir", "./logs")
+
+    return _resolve_project_path(project_root, data_dir), _resolve_project_path(project_root, logs_dir)
+
+
+def _read_simple_yaml_sections(config_path: Path) -> dict[str, dict[str, str]]:
+    """Read simple top-level YAML sections containing scalar key/value pairs."""
+    sections: dict[str, dict[str, str]] = {}
+    current_section: str | None = None
+
+    try:
+        lines = config_path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return sections
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if line and not line.startswith((" ", "\t")):
+            current_section = stripped[:-1].strip() if stripped.endswith(":") else None
+            if current_section:
+                sections.setdefault(current_section, {})
+            continue
+        if not current_section or ":" not in stripped:
+            continue
+
+        key, value = stripped.split(":", 1)
+        value = value.split("#", 1)[0].strip().strip('"').strip("'")
+        if value:
+            sections[current_section][key.strip()] = value
+
+    return sections
+
+
+def _resolve_project_path(project_root: Path, value: str) -> Path:
+    """Resolve config paths relative to the project root."""
+    path = Path(value).expanduser()
+    if path.is_absolute():
+        return path
+    return project_root / path
+
+
+def _format_project_path(project_root: Path, path: Path) -> str:
+    """Format paths relative to the project root when possible."""
+    try:
+        return str(path.relative_to(project_root))
+    except ValueError:
+        return str(path)
+
+
+def run_project_init() -> bool:
+    """Render first-run initialization actions."""
+    actions, is_ok = initialize_project()
+    table = Table(title="项目初始化")
+    table.add_column("项目", style="cyan")
+    table.add_column("状态", width=10)
+    table.add_column("说明", style="white")
+
+    for action in actions:
+        status = action["status"]
+        if status in ("已创建", "已准备", "可用"):
+            rendered_status = "[green]" + status + "[/green]"
+        elif status == "已存在":
+            rendered_status = "[yellow]" + status + "[/yellow]"
+        else:
+            rendered_status = "[red]" + status + "[/red]"
+        table.add_row(action["item"], rendered_status, action["detail"])
+
+    console.print(table)
+    if is_ok:
+        console.print(
+            Panel.fit(
+                "[bold green]初始化完成。[/bold green]\n\n"
+                "下一步：\n"
+                "1. 打开 `.env`，填写 `ANTHROPIC_API_KEY`\n"
+                "2. 运行 `python main.py --check`\n"
+                "3. 运行 `python main.py --demo`",
+                border_style="green",
+            )
+        )
+    else:
+        console.print(
+            Panel.fit(
+                "[bold yellow]初始化没有完全成功。[/bold yellow]\n\n"
+                "请先处理失败项，然后再次运行 `python main.py --init`。",
+                border_style="yellow",
+            )
+        )
+    return is_ok
+
+
+def run_environment_check() -> bool:
+    """Render environment checks and return whether the app can start."""
+    checks, is_ready = collect_environment_checks()
+    table = Table(title="启动环境检查")
+    table.add_column("项目", style="cyan")
+    table.add_column("结果", width=10)
+    table.add_column("说明", style="white")
+
+    for check in checks:
+        passed = bool(check["passed"])
+        required = bool(check["required"])
+        if passed:
+            result = "[green]通过[/green]"
+        elif required:
+            result = "[red]需处理[/red]"
+        else:
+            result = "[yellow]建议[/yellow]"
+        table.add_row(str(check["name"]), result, str(check["detail"]))
+
+    console.print(table)
+    if is_ready:
+        console.print(
+            Panel.fit(
+                "[bold green]环境可以启动 Teacher-skill。[/bold green]\n\n"
+                "下一步可以运行：\n"
+                "[green]python main.py --demo[/green]\n"
+                "或：\n"
+                "[green]python main.py --file article.md[/green]",
+                border_style="green",
+            )
+        )
+    else:
+        console.print(
+            Panel.fit(
+                "[bold yellow]环境还没准备好。[/bold yellow]\n\n"
+                "优先处理红色项目；常见修复：\n"
+                "1. 复制 `.env.example` 为 `.env`\n"
+                "2. 填写 `ANTHROPIC_API_KEY`\n"
+                "3. 运行 `pip install -r requirements.txt`",
+                border_style="yellow",
+            )
+        )
+    return is_ready
 
 
 class TeacherSkillApp:
     """Teacher-skill main application — CLI interaction and lifecycle."""
 
     def __init__(self):
+        load_runtime_dependencies()
         from src.utils.config import get_config
         cfg = get_config()
         self.user_id = cfg.app.user_id
         self.storage = TopicStorage(self.user_id)
         self.current_engine: TutorEngine | None = None
         self.user_level = "beginner"
+        self._pending_review_topic_id: str | None = None
         self._llm_available = self._check_llm()
         self.logger = get_logger("main")
 
@@ -64,7 +523,8 @@ class TeacherSkillApp:
                 "[bold cyan]🎓 Teacher-skill 数字助教[/bold cyan]\n\n"
                 "[yellow]启发式学习循环：[/yellow]\n"
                 "讲解 → 提问 → 反馈 → 循环\n\n"
-                "[dim]推荐入口：python main.py --file article.md[/dim]\n"
+                "[dim]快速体验：python main.py --demo[/dim]\n"
+                "[dim]文件学习：python main.py --file article.md[/dim]\n"
                 "[dim]输入 /help 查看帮助[/dim]",
                 border_style="cyan",
             )
@@ -79,11 +539,12 @@ class TeacherSkillApp:
         self.logger.info("LLM available, ready to start")
         return True
 
-    def run(self, file_path: str | None = None) -> None:
+    def run(self, file_path: str | None = None, demo: bool = False) -> None:
         """Main application loop.
 
         Args:
             file_path: 可选，从文件加载学习材料（.md/.txt/.pdf）。
+            demo: 是否使用内置示例材料启动体验。
         """
         try:
             if not self.start():
@@ -92,6 +553,10 @@ class TeacherSkillApp:
             user_level = self._run_onboarding()
             self.user_level = user_level
 
+            if demo:
+                self._start_demo_topic(user_level)
+                return
+
             if file_path:
                 self._start_new_topic(user_level, file_path=file_path)
                 return
@@ -99,6 +564,9 @@ class TeacherSkillApp:
             selected_topic_id = self._select_topic_or_new()
 
             if selected_topic_id:
+                if self._pending_review_topic_id == selected_topic_id:
+                    self._review_topic(selected_topic_id)
+                    return
                 self._resume_topic(selected_topic_id)
                 return
 
@@ -185,8 +653,10 @@ class TeacherSkillApp:
             console.print(f"      [dim]{escape(' · '.join(details))}[/dim]")
         console.print()
         console.print(
-            "[dim]输入对应数字继续学习，输入 new 开始新主题，或输入 history 查看历史记录[/dim]"
+            "[dim]输入对应数字继续学习，输入 new 开始新主题，输入 history 查看历史记录，"
+            "或直接说“复习一下 xxx”。[/dim]"
         )
+        topic_ids = {topic_id for topic_id, _ in topic_rows}
 
         while True:
             choice = console.input("\n[bold blue>[/bold blue] ").strip()
@@ -195,13 +665,29 @@ class TeacherSkillApp:
             if choice.lower() == "history":
                 self._show_history_topics()
                 continue
+            if is_review_intent(choice):
+                matched_topic = self._match_review_topic(choice)
+                if matched_topic and matched_topic.topic_id in topic_ids:
+                    self._pending_review_topic_id = matched_topic.topic_id
+                    console.print(
+                        f"[cyan]已匹配历史主题：{escape(matched_topic.title or matched_topic.topic_id)}[/cyan]"
+                    )
+                    console.print("[dim]进入复习模式：跳过讲解，直接从待巩固知识点开始提问。[/dim]")
+                    return matched_topic.topic_id
+                if matched_topic:
+                    console.print(
+                        "[yellow]找到了历史记录，但本地 topic 状态文件不存在，暂时无法恢复。[/yellow]"
+                    )
+                else:
+                    console.print("[yellow]没有匹配到历史主题。可输入 history 查看历史记录。[/yellow]")
+                continue
             try:
                 idx = int(choice)
                 if 1 <= idx <= len(topic_rows):
                     return topic_rows[idx - 1][0]
                 console.print("[red]无效的选择，请重新输入[/red]")
             except ValueError:
-                console.print("[red]请输入数字、new 或 history[/red]")
+                console.print("[red]请输入数字、new、history，或“复习一下 xxx”[/red]")
 
     def _topic_display_title(self, topic_id: str, state: dict) -> str:
         """Return a readable topic title for history selection."""
@@ -245,6 +731,8 @@ class TeacherSkillApp:
         """Return a readable material source label."""
         source_type = str(state.get("source_type") or "").strip()
         source_path = str(state.get("source_path") or "").strip()
+        if source_type == "demo":
+            return "内置示例"
         if source_path:
             return f"文件 {Path(source_path).name}"
         if source_type == "file":
@@ -287,26 +775,67 @@ class TeacherSkillApp:
         self._learning_loop(topic_state)
         self._show_summary(topic_state)
 
+    def _review_topic(self, topic_id: str) -> None:
+        """Start review mode for a previously learned topic."""
+        self.logger.info(f"Reviewing topic {topic_id}")
+        console.print(f"\n[cyan]正在进入复习模式：{topic_id}...[/cyan]")
+        state_data = self.storage.load_topic_state(topic_id)
+        history_data = self.storage.load_conversation_history(topic_id)
+
+        if not state_data:
+            self.logger.error(f"Failed to load topic state for review: {topic_id}")
+            console.print("[red]无法加载该主题的学习进度[/red]")
+            return
+
+        topic_state = TopicState.model_validate(state_data)
+        self.current_engine = TutorEngine(self.user_id, topic_id)
+        if history_data and history_data.get("messages"):
+            self.current_engine.restore_memory(history_data["messages"])
+
+        console.print(
+            Panel.fit(
+                f"[bold cyan]复习模式：{escape(topic_state.title or topic_id)}[/bold cyan]\n\n"
+                "本轮会优先提问待巩固、答错过或用过提示的知识点。\n"
+                "[dim]复习模式会直接提问，不重新讲解；可用 /direct 查看答案，/skip 跳过。[/dim]",
+                border_style="cyan",
+            )
+        )
+        response = self.current_engine.start_review(topic_state)
+        self._display_response(response)
+        if response.is_final:
+            self._finish_review_session(topic_state, self._new_review_stats())
+            return
+
+        self._review_loop(topic_state)
+        self._save_progress()
+
     def _start_new_topic(
-        self, user_level: str, file_path: str | None = None
+        self,
+        user_level: str,
+        file_path: str | None = None,
+        material: str | None = None,
+        source_type: str | None = None,
     ) -> None:
         """Start a brand-new topic.
 
         Args:
             user_level: 用户学习水平。
             file_path: 可选，从文件加载学习材料。
+            material: 可选，直接传入学习材料。
+            source_type: 可选，材料来源类型。
         """
         topic_id = f"topic_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         self.logger.info(f"Starting new topic {topic_id}, user_level={user_level}")
 
-        if file_path:
-            material = self._load_material_from_file(file_path)
-            if material is None:
-                return
-        else:
-            material = self._collect_material_interactively()
-            if material is None:
-                return
+        if material is None:
+            if file_path:
+                material = self._load_material_from_file(file_path)
+                if material is None:
+                    return
+            else:
+                material = self._collect_material_interactively()
+                if material is None:
+                    return
 
         if not material:
             console.print("[yellow]未输入内容，退出[/yellow]")
@@ -325,21 +854,58 @@ class TeacherSkillApp:
             topic_state = self.current_engine.analyze_material(
                 material, user_level=user_level
             )
-            self._apply_topic_metadata(topic_state, material, source_path=file_path)
+            self._apply_topic_metadata(
+                topic_state,
+                material,
+                source_path=file_path,
+                source_type=source_type,
+            )
 
         self.logger.info(f"Material analyzed: {topic_state.total_chunks} chunks")
         self._show_analysis_result(topic_state)
         self._learning_loop(topic_state)
         self._show_summary(topic_state)
 
+    def _start_demo_topic(self, user_level: str) -> None:
+        """Start a new topic from the built-in demo material."""
+        material = self._load_demo_material()
+        if not material:
+            return
+
+        console.print(
+            Panel.fit(
+                "[bold cyan]Demo 示例模式[/bold cyan]\n\n"
+                "将使用内置短文《番茄工作法入门》体验完整学习闭环。\n"
+                "[dim]这个模式不需要你准备学习材料，但仍需要可用的 LLM API Key。[/dim]",
+                border_style="cyan",
+            )
+        )
+        self._start_new_topic(user_level, material=material, source_type="demo")
+
+    def _load_demo_material(self) -> str | None:
+        """Load the built-in demo article."""
+        try:
+            material = DEMO_MATERIAL_PATH.read_text(encoding="utf-8").strip()
+        except OSError as exc:
+            self.logger.error(f"Demo material load failed: {exc}")
+            console.print(f"[red]加载内置示例失败: {exc}[/red]")
+            return None
+
+        self.logger.info(f"Loaded demo material: {len(material)} chars")
+        return material
+
     def _apply_topic_metadata(
         self,
         topic_state: TopicState,
         material: str,
         source_path: str | None = None,
+        source_type: str | None = None,
     ) -> None:
         """Fill missing human-readable topic metadata."""
-        if source_path:
+        if source_type:
+            topic_state.source_type = source_type
+            topic_state.source_path = source_path
+        elif source_path:
             topic_state.source_type = "file"
             topic_state.source_path = source_path
         else:
@@ -425,6 +991,8 @@ class TeacherSkillApp:
     def _collect_material_interactively(self) -> str | None:
         """Collect material for a new topic without forcing /done by default."""
         console.print("[cyan]请选择学习材料来源：[/cyan]")
+        console.print("[bold]快速体验：[/bold]如果还没有材料，可以退出后运行：")
+        console.print("  [green]python main.py --demo[/green]")
         console.print("[bold]推荐：[/bold]先把材料保存成文件，然后运行：")
         console.print("  [green]python main.py --file article.md[/green]\n")
         console.print(
@@ -632,6 +1200,150 @@ class TeacherSkillApp:
         self._display_response(response)
         return False
 
+    def _review_loop(self, topic_state: TopicState) -> None:
+        """Run review mode without re-teaching each chunk."""
+        self.logger.info(f"Review loop started: {topic_state.total_chunks} chunks")
+        review_stats = self._new_review_stats()
+
+        while True:
+            user_input = console.input("\n[bold blue复习>[/bold blue] ").strip()
+            if not user_input:
+                continue
+
+            lowered = user_input.lower()
+            if lowered in ("/help", "help"):
+                self._show_help()
+                continue
+
+            if lowered in ("/exit", "/quit", "exit", "quit"):
+                self.logger.info("User requested exit from review, saving progress")
+                self._save_progress()
+                console.print("[cyan]已保存复习进度，下次再见！[/cyan]")
+                sys.exit(0)
+
+            if lowered == "/direct":
+                response = self.current_engine.receive_answer("", is_direct=True)
+                self._record_review_result(review_stats, response, is_direct=True)
+                self._display_response(response)
+                if self._advance_review_or_finish():
+                    self._finish_review_session(topic_state, review_stats)
+                    break
+                continue
+
+            if lowered == "/progress":
+                self._show_progress()
+                continue
+
+            if lowered == "/list":
+                self._show_chunk_list()
+                continue
+
+            if lowered == "/review":
+                self._show_review_items()
+                continue
+
+            if lowered == "/history":
+                self._show_history_topics()
+                continue
+
+            if lowered == "/skip":
+                response = self.current_engine.skip_review_chunk()
+                self._record_review_result(review_stats, response, is_skipped=True)
+                self._display_response(response)
+                self._save_progress()
+                if response.is_final:
+                    self._finish_review_session(topic_state, review_stats)
+                    break
+                continue
+
+            if self._parse_load_command(user_input) is not None:
+                console.print("[yellow]复习模式暂不追加材料；请退出后用 /load 或 --file 学习新材料。[/yellow]")
+                continue
+
+            confirmed_answer = self._confirm_answer_submission(user_input)
+            if confirmed_answer is None:
+                continue
+
+            self.logger.debug(f"Review answer: {confirmed_answer[:50]}...")
+            response = self.current_engine.receive_answer(confirmed_answer, is_direct=False)
+            self._record_review_result(review_stats, response)
+            self._display_response(response)
+
+            if self._review_response_finishes_item(response):
+                if self._advance_review_or_finish():
+                    self._finish_review_session(topic_state, review_stats)
+                    break
+
+    def _new_review_stats(self) -> dict[str, int]:
+        """Create counters for one review session."""
+        return {
+            "answered": 0,
+            "correct": 0,
+            "direct": 0,
+            "skipped": 0,
+            "kept_review": 0,
+        }
+
+    def _record_review_result(
+        self,
+        stats: dict[str, int],
+        response: AIMessage,
+        *,
+        is_direct: bool = False,
+        is_skipped: bool = False,
+    ) -> None:
+        """Update review-session counters from one user action."""
+        if is_skipped:
+            stats["skipped"] += 1
+            stats["kept_review"] += 1
+            return
+
+        if is_direct:
+            stats["direct"] += 1
+            stats["kept_review"] += 1
+            return
+
+        stats["answered"] += 1
+        if response.response_type == ResponseType.FEEDBACK_CORRECT:
+            stats["correct"] += 1
+            return
+
+        if response.is_final and response.response_type in (
+            ResponseType.FEEDBACK_WRONG,
+            ResponseType.FEEDBACK_HINT,
+        ):
+            stats["kept_review"] += 1
+
+    def _review_response_finishes_item(self, response: AIMessage) -> bool:
+        """Return whether a review response should move to the next review item."""
+        return response.response_type in (
+            ResponseType.FEEDBACK_CORRECT,
+            ResponseType.DIRECT_ANSWER,
+        ) or (
+            response.is_final
+            and response.response_type
+            in (ResponseType.FEEDBACK_WRONG, ResponseType.FEEDBACK_HINT)
+        )
+
+    def _advance_review_or_finish(self) -> bool:
+        """Move to the next review item.
+
+        Returns True when the review queue is complete.
+        """
+        response = self.current_engine.next_review_chunk()
+        self._display_response(response)
+        return response.is_final
+
+    def _finish_review_session(
+        self,
+        topic_state: TopicState,
+        review_stats: dict[str, int],
+    ) -> None:
+        """Show review summary and persist review metadata."""
+        self._show_review_summary(topic_state, review_stats)
+        self._record_review_completion(topic_state)
+        self._save_progress()
+
     def _confirm_answer_submission(self, answer: str) -> str | None:
         """Ask the user to confirm, edit, or cancel an answer before judging."""
         current_answer = answer.strip()
@@ -837,6 +1549,16 @@ class TeacherSkillApp:
         attempts = sum(c.attempts for c in ts.chunks)
         wrong = sum(c.fail_count for c in ts.chunks)
         current = ts.chunks[ts.current_chunk_index] if ts.chunks and ts.current_chunk_index < len(ts.chunks) else None
+        review_progress = (
+            self.current_engine.get_review_progress()
+            if hasattr(self.current_engine, "get_review_progress")
+            else "未开始"
+        )
+        review_line = (
+            f"\n复习进度: [cyan]{review_progress}[/cyan]"
+            if review_progress != "未开始"
+            else ""
+        )
         console.print(
             Panel.fit(
                 f"[bold]当前进度[/bold]\n\n"
@@ -846,7 +1568,8 @@ class TeacherSkillApp:
                 f"待巩固: [yellow]{needs_review}[/yellow]\n"
                 f"未开始: {not_started}\n"
                 f"本主题作答: {attempts} 次，答错: {wrong} 次\n"
-                f"状态: {ts.is_completed and '已完成' or '进行中'}",
+                f"状态: {ts.is_completed and '已完成' or '进行中'}"
+                f"{review_line}",
                 border_style="cyan",
             )
         )
@@ -940,6 +1663,7 @@ class TeacherSkillApp:
         table.add_column("掌握", style="green", width=8)
         table.add_column("待巩固", style="yellow", width=8)
         table.add_column("完成时间", style="dim", width=16)
+        table.add_column("上次复习", style="dim", width=16)
 
         for i, topic in enumerate(profile.history_topics, 1):
             table.add_row(
@@ -948,10 +1672,23 @@ class TeacherSkillApp:
                 f"{topic.mastered_chunks}/{topic.total_chunks}",
                 str(topic.review_chunks),
                 topic.completed_at.strftime("%Y-%m-%d %H:%M"),
+                self._format_optional_time(topic.last_reviewed_at),
             )
 
         console.print(table)
         console.print("[dim]后续复习模式会优先使用这些历史记录和待巩固知识点。[/dim]")
+
+    def _format_optional_time(self, value: datetime | None) -> str:
+        """Format an optional datetime for compact tables."""
+        if not value:
+            return "未复习"
+        return value.strftime("%Y-%m-%d %H:%M")
+
+    def _match_review_topic(self, user_input: str) -> LearnedTopic | None:
+        """Match a natural-language review request to an archived topic."""
+        profile = self._load_or_create_profile()
+        matched = match_history_topic(user_input, profile.history_topics)
+        return matched if isinstance(matched, LearnedTopic) else None
 
     def _show_help(self) -> None:
         """Display available commands."""
@@ -970,7 +1707,9 @@ class TeacherSkillApp:
   /load     - 加载文件；学习中使用会追加为新的知识点
   /exit     - 退出并保存进度
 
-  推荐入口：python main.py --file article.md
+  快速体验：python main.py --demo
+  文件学习：python main.py --file article.md
+  复习入口：在主题选择时输入“复习一下 主题名”
   直接输入回答内容即可答题
 """
         console.print(Panel.fit(help_text, title="帮助", border_style="green"))
@@ -995,6 +1734,122 @@ class TeacherSkillApp:
         )
         self._archive_completed_topic(topic_state, mastered, needs_review, total)
         self._save_progress()
+
+    def _show_review_summary(
+        self,
+        topic_state: TopicState,
+        review_stats: dict[str, int],
+    ) -> None:
+        """Display a review-session summary report."""
+        total = len(topic_state.chunks)
+        mastered = sum(1 for c in topic_state.chunks if c.status == LearningStatus.MASTERED)
+        remaining_review = self._remaining_review_items(topic_state)
+        correct_rate = (
+            review_stats["correct"] / review_stats["answered"] * 100
+            if review_stats["answered"]
+            else 0
+        )
+
+        console.print(
+            Panel.fit(
+                f"[bold green]✅ 本轮复习完成[/bold green]\n\n"
+                f"主题: [cyan]{escape(topic_state.title or topic_state.topic_id)}[/cyan]\n"
+                f"当前掌握: [green]{mastered}[/green] / {total}\n"
+                f"仍待巩固: [yellow]{len(remaining_review)}[/yellow]\n"
+                f"本轮作答: {review_stats['answered']} 次\n"
+                f"答对: [green]{review_stats['correct']}[/green]"
+                f"（正确率 {correct_rate:.0f}%）\n"
+                f"速查: {review_stats['direct']} 次\n"
+                f"跳过: {review_stats['skipped']} 次\n"
+                f"本轮保留待巩固: [yellow]{review_stats['kept_review']}[/yellow]",
+                border_style="green",
+            )
+        )
+
+        if not remaining_review:
+            console.print("[green]这轮复习后没有仍需巩固的知识点。[/green]")
+            return
+
+        table = Table(title="🟡 复习后仍待巩固")
+        table.add_column("序号", style="cyan", width=4)
+        table.add_column("标题", style="white")
+        table.add_column("状态", style="yellow", width=8)
+        table.add_column("答错", width=6)
+        table.add_column("提示", width=6)
+
+        for i, chunk in remaining_review[:8]:
+            table.add_row(
+                str(i),
+                escape(chunk.title or "未命名"),
+                self._format_chunk_status(chunk),
+                str(chunk.fail_count),
+                str(chunk.hint_level),
+            )
+
+        console.print(table)
+        if len(remaining_review) > 8:
+            console.print(f"[dim]还有 {len(remaining_review) - 8} 个待巩固知识点未显示。[/dim]")
+
+    def _remaining_review_items(
+        self,
+        topic_state: TopicState,
+    ) -> list[tuple[int, ChunkState]]:
+        """Return chunks that still need attention after a review session."""
+        return [
+            (i, chunk)
+            for i, chunk in enumerate(topic_state.chunks, 1)
+            if self._chunk_still_needs_review(chunk)
+        ]
+
+    def _chunk_still_needs_review(self, chunk: ChunkState) -> bool:
+        """Decide whether a chunk remains weak after the current review."""
+        if chunk.status == LearningStatus.NEEDS_REVIEW:
+            return True
+        return chunk.status != LearningStatus.MASTERED and (
+            chunk.fail_count > 0 or chunk.hint_level > 0
+        )
+
+    def _record_review_completion(self, topic_state: TopicState) -> None:
+        """Update history metadata after a review session finishes."""
+        profile = self._load_or_create_profile()
+        now = datetime.now()
+        total = len(topic_state.chunks)
+        mastered = sum(1 for c in topic_state.chunks if c.status == LearningStatus.MASTERED)
+        needs_review = len(self._remaining_review_items(topic_state))
+
+        for topic in profile.history_topics:
+            if topic.topic_id == topic_state.topic_id:
+                topic.title = topic_state.title or topic.title or topic.topic_id
+                topic.summary = topic_state.summary or topic.summary
+                topic.total_chunks = total
+                topic.mastered_chunks = mastered
+                topic.review_chunks = needs_review
+                topic.source_type = topic_state.source_type
+                topic.source_path = topic_state.source_path
+                topic.last_reviewed_at = now
+                break
+        else:
+            profile.history_topics.insert(
+                0,
+                LearnedTopic(
+                    topic_id=topic_state.topic_id,
+                    title=topic_state.title or topic_state.topic_id,
+                    summary=topic_state.summary,
+                    completed_at=topic_state.created_at,
+                    total_chunks=total,
+                    mastered_chunks=mastered,
+                    review_chunks=needs_review,
+                    source_type=topic_state.source_type,
+                    source_path=topic_state.source_path,
+                    last_reviewed_at=now,
+                ),
+            )
+
+        profile.total_topics = len(profile.history_topics)
+        profile.completed_topics = len(profile.history_topics)
+        profile.updated_at = now
+        self.storage.save_user_profile(profile.model_dump(mode="json"))
+        console.print("[dim]已更新历史记录的复习时间和待巩固数量。[/dim]")
 
     def _load_or_create_profile(self) -> UserProfile:
         """Load the current user profile, filling defaults for older profiles."""
@@ -1054,17 +1909,52 @@ def main() -> None:
     """Application entry point."""
     parser = argparse.ArgumentParser(
         description="🎓 Teacher-skill 数字助教",
-        epilog="推荐用法: python main.py --file article.md",
+        epilog="推荐用法: python main.py --demo 或 python main.py --file article.md",
     )
-    parser.add_argument(
+    input_group = parser.add_mutually_exclusive_group()
+    input_group.add_argument(
         "--file",
         help="从文件加载学习材料（支持 .md/.txt/.pdf）",
         default=None,
     )
+    input_group.add_argument(
+        "--demo",
+        action="store_true",
+        help="使用内置示例材料体验完整学习闭环",
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="检查 API Key、配置文件、依赖和示例材料是否准备好",
+    )
+    parser.add_argument(
+        "--init",
+        action="store_true",
+        help="初始化 .env、数据目录和日志目录，不覆盖已有配置",
+    )
     args = parser.parse_args()
 
+    if args.init:
+        if not run_project_init():
+            sys.exit(1)
+        if not args.check:
+            return
+
+    if args.check:
+        if not run_environment_check():
+            sys.exit(1)
+        return
+
+    try:
+        load_runtime_dependencies()
+    except ModuleNotFoundError as exc:
+        console.print(f"[red]缺少运行依赖：{exc.name}[/red]")
+        console.print("[yellow]请先运行：python -m pip install -r requirements.txt[/yellow]")
+        console.print("[dim]也可以运行 python main.py --check 查看完整检查结果。[/dim]")
+        sys.exit(1)
+
     app = TeacherSkillApp()
-    app.run(file_path=args.file)
+    app.run(file_path=args.file, demo=args.demo)
 
 
 if __name__ == "__main__":

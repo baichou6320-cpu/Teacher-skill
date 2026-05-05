@@ -10,14 +10,18 @@
 
 ```bash
 # 1. 配置 API Key
-cp .env.example .env
+python main.py --init
 # 编辑 .env，填入 ANTHROPIC_API_KEY
 
 # 2. 安装依赖
 pip install -r requirements.txt
 
-# 3. 启动学习
+# 3. 检查配置
+python main.py --check
+
+# 4. 启动学习
 python main.py                    # 交互式启动
+python main.py --demo             # 使用内置示例体验
 python main.py --file article.md  # 从文件加载
 ```
 
@@ -64,6 +68,9 @@ python main.py --file article.md  # 从文件加载
 
 | 命令 | 功能 | 状态 | 说明 |
 |------|------|------|------|
+| `--init` | 初始化本地项目 | ✅ 可用 | 创建 `.env`、数据目录和日志目录，不覆盖已有 `.env` |
+| `--check` | 检查启动环境 | ✅ 可用 | 检查 API Key、配置文件、依赖和 demo 材料 |
+| `--demo` | 使用内置示例开始学习 | ✅ 可用 | 第一次体验时不需要准备材料，仍需 API Key |
 | `--file <path>` | 从文件开始学习 | ✅ 可用 | 推荐入口，加载 `.md` / `.txt` / `.pdf` |
 | `/load <path>` | 加载或追加文件 | ✅ 可用 | 新主题阶段用于加载材料，学习中用于追加知识点 |
 | `/progress` | 查看当前进度 | ✅ 可用 | 显示当前知识点、掌握数、待巩固数和答题统计 |
@@ -76,13 +83,16 @@ python main.py --file article.md  # 从文件加载
 | `/direct` | 速查模式 | ✅ 可用 | 直接给答案，但该知识点标记为待巩固 |
 | `/help` | 查看帮助 | ✅ 可用 | 显示所有可用命令 |
 | `/exit` | 退出并保存 | ✅ 可用 | 保存当前进度，下次可恢复 |
-| 自然语言复习意图 | 跨主题复习 | 🔨 框架已设计 | 如“复习一下 transformer”，属于后续 v0.4.0 |
+| 自然语言复习意图 | 跨主题复习入口 | ✅ 基础版可用 | 已能匹配历史主题，按薄弱点优先直接提问，并输出复习报告 |
 | `/create` | 创建自定义老师 | ⏳ 框架已设计 | 选择/调整教学风格，保存为 persona |
 
 ### 命令状态关系
 
 ```
 [空闲状态]
+  ├── --init ──→ [创建本地配置和运行目录] ──→ [提示填写 API Key]
+  ├── --check ──→ [检查配置和依赖] ──→ [给出修复建议]
+  ├── --demo ──→ [加载内置示例] ──→ [分析材料] ──→ [教学循环中]
   ├── --file <path> ──→ [分析材料] ──→ [教学循环中]
   ├── /load <path> ──→ [分析材料] ──→ [教学循环中]
   ├── 自然语言复习意图 ──→ [主题匹配] ──→ [复习循环中]
@@ -102,6 +112,11 @@ python main.py --file article.md  # 从文件加载
 
 [复习循环中]
   ├── /progress ──→ 显示复习进度
+  ├── /list ──→ 显示全部知识点
+  ├── /review ──→ 显示本主题待巩固知识点
+  ├── /history ──→ 显示历史主题和上次复习时间
+  ├── /skip ──→ 跳过当前复习题，保留待巩固
+  ├── /direct ──→ 查看答案，保留待巩固
   └── /exit ──→ 保存并退出
 ```
 
@@ -140,9 +155,7 @@ python main.py --file article.md  # 从文件加载
     └── 进度自动保存到 data/users/{user_id}/
 ```
 
-### Review Flow — 复习旧知识（Phase 2 后期实现）
-
-> ⚠️ 框架设计，待实现
+### Review Flow — 复习旧知识（基础版已实现）
 
 ```
 用户: "复习一下之前学的 transformer"
@@ -161,11 +174,13 @@ python main.py --file article.md  # 从文件加载
 
   Step 4: 复习循环（区别于学习循环）
     └── 跳过讲解，直接提问
-    └── 问题基于历史 Q&A 重新生成
+    └── 使用已有 chunk 问题验证掌握程度
     └── 判卷反馈更简洁，不重复讲解基础概念
 
-  Step 5: 更新状态
+  Step 5: 复习报告 + 更新状态
+    └── 显示本轮作答、答对、速查、跳过、仍待巩固
     └── 更新 profile.history_topics
+    └── 更新 last_reviewed_at
     └── 更新各 chunk 的掌握状态
 ```
 
@@ -224,7 +239,7 @@ prompts/
 │   ├── 01_analyzer.md    # 材料分析 + 知识切片
 │   ├── 02_teach.md       # 讲解 + 提问
 │   ├── 03_judge.md       # 判卷 + 渐进提示
-│   └── 04_review.md      # 复习模式（未来）
+│   └── 04_review.md      # 复习判卷 + 短反馈
 └── personas/             # 风格扩展层（Phase 3）
     ├── gentle_mentor.md  # 默认风格
     ├── strict_teacher.md # 严师模式
@@ -242,7 +257,7 @@ engine.py 根据当前场景，自动拼接对应的 Prompt 层：
 | 材料分析 | `_base + 01_analyzer` |
 | 讲解提问 | `_base + _persona + 02_teach` |
 | 判卷反馈 | `_base + _persona + 03_judge` |
-| 复习模式 | `_base + _persona + 04_review`（未来）|
+| 复习模式 | `_base + _persona + 04_review` |
 
 ### 修改指南
 
@@ -252,6 +267,7 @@ engine.py 根据当前场景，自动拼接对应的 Prompt 层：
 | 输出格式规范 | `_base.md` | 所有模块 |
 | 讲解策略 | `system/02_teach.md` | 仅讲解阶段 |
 | 判卷标准 | `system/03_judge.md` | 仅判卷阶段 |
+| 复习反馈 | `system/04_review.md` | 仅复习模式 |
 | 新增功能模块 | `system/` 下新建文件 | 新功能 |
 
 ### 向后兼容
@@ -316,7 +332,7 @@ progress = engine.get_progress()  # "2/5"
 | 错误处理 | ✅ 完成 | LLM 超时/断网友好提示 |
 | 单元测试 | ✅ 完成 | pytest，不依赖真实 LLM |
 | CLI 控制命令 | ✅ 完成 | /skip、/back、/list、/jump、/review、/history |
-| 跨主题复习模式 | 🔨 框架已设计 | 自然语言触发，如“复习一下 transformer” |
+| 跨主题复习模式 | ✅ 基础版完成 | 自然语言触发，如“复习一下 transformer”；结束后输出复习报告 |
 
 ### Phase 3 Skill 体系
 
@@ -349,4 +365,4 @@ progress = engine.get_progress()  # "2/5"
 | docs/product/roadmap.md | 开发计划与路线图 | 决定"今天做什么"时读 |
 | docs/product/PRD.md | 产品需求：为什么做 | 想了解背景时读 |
 | docs/development/changelog.md | 变更日志 | 查某功能什么时候加的 |
-| docs/product/review-mode.md | 复习模式扩展设计 | Phase 2 后期实现时读 |
+| docs/product/review-mode.md | 复习模式扩展设计 | 理解复习模式入口、队列和报告时读 |

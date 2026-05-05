@@ -45,14 +45,20 @@
 | C7 | topic 可读标题 | `models/state.py` / `storage.py` / `main.py` | ✅ 已完成 |
 | C8 | 答案提交确认 | `main.py` | ✅ 已完成：Enter 提交，`/edit` 修改，`/cancel` 取消 |
 | C9 | 错误反馈情绪优化 | `main.py` / prompt | ✅ 已完成：温和反馈面板 + hint_level 可见说明 |
+| C10 | Demo 示例模式 | `main.py` / `samples/demo_article.md` | ✅ 已完成：`python main.py --demo` 使用内置材料体验 |
+| C11 | 启动环境检查 | `main.py` / `README.md` / `docs/install/README.md` | ✅ 已完成：`python main.py --check` 检查 API Key、配置、依赖和 demo 材料 |
+| C12 | 项目初始化 | `main.py` / `README.md` / `docs/install/README.md` | ✅ 已完成：`python main.py --init` 创建 `.env`、数据目录和日志目录 |
 
 **验收**：
-1. 用户可以用 `python main.py --file article.md` 直接开始学习
-2. 用户可以在新主题和学习过程中使用 `/load <路径>`
-3. 用户可以使用 `/skip`、`/back`、`/list`、`/jump N`、`/review` 控制学习流程
-4. `/progress` 不只是显示 `3/7`，还显示掌握、待巩固和答题统计
-5. 用户提交答案前可以确认、修改或取消
-6. 答错反馈不再只显示红色错误，而是展示温和提示和当前提示层级
+1. 用户可以用 `python main.py --demo` 不准备材料直接体验
+2. 用户可以用 `python main.py --file article.md` 直接开始学习
+3. 用户可以用 `python main.py --check` 在正式启动前检查配置是否完整
+4. 用户可以用 `python main.py --init` 自动准备本地配置，不需要手动复制 `.env.example`
+5. 用户可以在新主题和学习过程中使用 `/load <路径>`
+6. 用户可以使用 `/skip`、`/back`、`/list`、`/jump N`、`/review` 控制学习流程
+7. `/progress` 不只是显示 `3/7`，还显示掌握、待巩固和答题统计
+8. 用户提交答案前可以确认、修改或取消
+9. 答错反馈不再只显示红色错误，而是展示温和提示和当前提示层级
 
 ---
 
@@ -64,17 +70,19 @@
 
 | # | 任务 | 文件 | 备注 |
 |---|------|------|------|
-| D1 | 创建 `prompts/04_review.md` | 复习专用 Prompt | 跳过讲解，直接提问 |
-| D2 | 意图识别 + 主题匹配 | `src/core/router.py` 或 `main.py` | 关键词触发复习模式 |
+| D1 | 创建 `prompts/system/04_review.md` | 复习专用 Prompt | ✅ 已完成：短反馈、快推进、薄弱点保留待巩固 |
+| D2 | 意图识别 + 主题匹配 | `src/core/router.py` / `main.py` | ✅ 已完成：识别“复习一下 xxx”并匹配 `history_topics` |
 | D3 | profile 数据结构扩展 | `models/user.py` | ✅ 已完成：`history_topics: List[LearnedTopic]` |
-| D4 | 复习引擎核心逻辑 | `src/core/review_engine.py` | 加载历史，薄弱点优先 |
+| D4 | 复习引擎核心逻辑 | `src/core/engine.py` / `main.py` | ✅ 基础版完成：跳过讲解，按薄弱点优先直接提问 |
 | D5 | history_topics 自动写入 | `main.py` `_show_summary()` 时更新 | ✅ 已完成：学完主题后自动归档，`/history` 可查看 |
+| D6 | 复习结束报告 | `main.py` | ✅ 已完成：输出本轮统计、仍待巩固列表，并更新 `last_reviewed_at` |
 
 **验收**：
 1. 输入"复习一下之前学的 transformer"能正确识别并加载对应主题
 2. 复习模式跳过讲解，直接进入提问
 3. 优先提问 `needs_review` 和 `fail_count > 0` 的 chunk
 4. 复习完成后更新 `profile.json` 的 `history_topics`
+5. 复习结束后能看到本轮作答、答对、速查、跳过、仍待巩固知识点
 
 ---
 

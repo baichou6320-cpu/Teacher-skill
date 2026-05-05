@@ -59,7 +59,9 @@
 
 ### D1. 新建复习 Prompt
 
-**文件**：`prompts/04_review.md`
+**文件**：`prompts/system/04_review.md`
+
+**状态**：✅ 已完成。复习专用 Prompt 已接入 `TutorEngine.receive_answer()`：普通学习使用 `03_judge.md`，复习模式使用 `04_review.md`。该 Prompt 要求短反馈、少讲解、快推进，连续卡住时保留待巩固并进入下一题。
 
 **内容**：
 ```
@@ -84,6 +86,8 @@
 ### D2. 意图识别 + 主题匹配
 
 **文件**：`main.py` 或新建 `src/core/router.py`
+
+**状态**：✅ 已完成入口地基。当前实现在 `src/core/router.py` 中提供 `is_review_intent()`、`extract_review_query()`、`match_history_topic()`；在主题选择阶段输入“复习一下 xxx”时，会从 `profile.history_topics` 匹配主题并进入复习模式。
 
 **实现**：
 ```python
@@ -132,6 +136,8 @@ class UserProfile(BaseModel):
 ### D4. 复习引擎核心逻辑
 
 **文件**：`src/core/engine.py` 或新建 `src/core/review_engine.py`
+
+**状态**：✅ 基础版已完成。当前在 `TutorEngine.start_review()` 中建立复习队列，排序规则为：`needs_review` / `fail_count > 0` / `hint_level > 0` 优先，其次未掌握，最后已掌握。复习模式直接提问，不重新讲解，并使用 `04_review.md` 做短反馈判卷。复习结束后会输出本轮统计报告，并更新历史主题的 `last_reviewed_at`、掌握数和待巩固数。
 
 **核心流程**：
 ```python
@@ -183,6 +189,7 @@ def _update_history_topics(self, topic_state: TopicState):
 2. 复习模式跳过讲解，直接进入提问
 3. 优先提问 `needs_review` 和 `fail_count > 0` 的 chunk
 4. 复习完成后更新 `profile.json` 的 `history_topics`
+5. 复习完成后显示本轮作答、答对、速查、跳过、仍待巩固知识点
 
 ---
 

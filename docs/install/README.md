@@ -15,6 +15,21 @@ git clone https://github.com/baichou6320-cpu/Teacher-skill.git
 cd Teacher-skill
 ```
 
+## Initialize Project
+
+Prepare local runtime files:
+
+```bash
+python main.py --init
+```
+
+This command:
+
+- copies `.env.example` to `.env` if `.env` does not exist
+- keeps an existing `.env` unchanged
+- creates the configured data and logs directories
+- checks that the built-in demo material exists
+
 ## Create Environment
 
 Windows PowerShell:
@@ -44,13 +59,7 @@ python -m pip install -r requirements.txt
 
 ## Configure API
 
-Copy the example environment file:
-
-```bash
-cp .env.example .env
-```
-
-Set your API key:
+Open `.env` and set your API key:
 
 ```text
 ANTHROPIC_API_KEY=your_api_key_here
@@ -82,7 +91,38 @@ llm:
   model_id: "kimi-k2.5"
 ```
 
+## Check Setup
+
+After installing dependencies and editing `.env`, run:
+
+```bash
+python main.py --check
+```
+
+The check verifies:
+
+- Python version
+- `.env` presence
+- `ANTHROPIC_API_KEY`
+- `config.yaml`
+- runtime dependencies
+- optional test dependencies
+- built-in demo material
+
+If a required item is missing, fix the red item first. Optional test dependencies
+only affect local test commands, not normal learning.
+
 ## Run
+
+Quick demo mode:
+
+```bash
+python main.py --demo
+```
+
+`--demo` uses the built-in article `samples/demo_article.md`, so you do not need
+to prepare your own learning material for the first run. It still needs a valid
+LLM API key.
 
 Recommended file-based mode:
 

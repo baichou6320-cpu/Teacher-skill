@@ -24,8 +24,8 @@
 - GitHub Actions 单测工作流已通过 ✅
 - `.env.example` 与 `config.yaml` 配置说明已校准：API Key/base_url 在 `.env`，模型参数在 `config.yaml` ✅
 - 安装和配置文档已完善：`docs/install/README.md` ✅
-- CLI 可用性修复已推进：推荐 `--file`、支持 `/load` 追加材料、支持 `/skip`/`/back`/`/list`/`/jump`/`/review`、历史 topic 显示可读标题、答案提交确认、温和错误反馈 ✅
-- 复习模式地基已开始：完成主题后自动写入 `profile.history_topics`，可用 `/history` 查看历史学习记录 ✅
+- CLI 可用性修复已推进：支持 `--init` 项目初始化、`--check` 启动环境检查（依赖缺失时也能轻量解析配置）、`--demo` 示例体验、推荐 `--file`、支持 `/load` 追加材料、支持 `/skip`/`/back`/`/list`/`/jump`/`/review`、历史 topic 显示可读标题、答案提交确认、温和错误反馈 ✅
+- 复习模式已形成可用闭环：完成主题后自动写入 `profile.history_topics`，可用 `/history` 查看历史学习记录，支持“复习一下 xxx”匹配历史主题，按薄弱点优先直接提问，接入复习专用短反馈 Prompt，并在复习结束后输出统计报告、更新 `last_reviewed_at` ✅
 
 **结论：Phase 2 核心教学闭环 + 工程基建已可用。**
 
@@ -48,7 +48,7 @@
 | Onboarding | `main.py` + `00_onboarding.md` | ✅ 已跑通 | 自动摸底，判定水平 |
 | 进度恢复 | `main.py` | ✅ 已可用 | 数字选择恢复 / `new` 创建新主题 |
 | 历史持久化 | `main.py` `_save_progress()` | ✅ 已可用 | 保存 `state.json` + `history.json` |
-| 单元测试 | `tests/unit/` × 8 文件 | 🚧 待重新验证 | translator/memory/rewards/config/file_loader/storage/main flow/engine navigation |
+| 单元测试 | `tests/unit/` × 8 文件 | 🚧 待重新验证 | 当前环境缺少可用 pytest；复习报告、`--check` 和 `--init` 改动已通过 `py_compile`，需本地或 CI 重新跑单测 |
 | Agent Skill | `skills/heuristic-teacher/SKILL.md` | ✅ 已建立 | 独立于产品文档，包含工作流与验证标准 |
 | CI | `.github/workflows/tests.yml` | ✅ 通过 | GitHub Actions `Tests` workflow 已跑绿 |
 
@@ -71,7 +71,7 @@
 |------|------|------|------|
 | **v0.2.0** | GitHub 首发 | README、安装文档、Skill 结构、CI、发布清单已完成 | ✅ 可发布 |
 | **v0.3.0** | CLI 可用性 | 输入体验、学习控制命令、进度感知、答案确认、反馈优化 | 🚧 进行中 |
-| **v0.4.0** | 复习模式 | 历史归档已完成；自然语言触发复习、跳过讲解直接提问、薄弱点优先待做 | 🚧 进行中 |
+| **v0.4.0** | 复习模式 | 历史归档、自然语言主题匹配、薄弱点优先直接提问、复习专用 Prompt、复习结束报告已完成 | ✅ 基础版完成 |
 | **v0.5.0** | 教学风格 | Persona 体系（严师/良师/苏格拉底/Peer） | ⏳ 待开始 |
 | **v1.0.0** | 普通用户产品版 | Web UI、拖拽上传、可视化进度、低门槛配置 | ⏳ 待开始 |
 

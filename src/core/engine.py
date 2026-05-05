@@ -43,6 +43,9 @@ class TutorEngine:
         self.topic_id = topic_id
         self.state = TutorState.IDLE
         self.topic_state: Optional[TopicState] = None
+        self._review_mode = False
+        self._review_queue: list[int] = []
+        self._review_position = 0
 
         self.memory = ConversationMemory(user_id, topic_id)
         self.rewards = RewardsCalculator()
@@ -86,6 +89,9 @@ class TutorEngine:
             self._prompt_judge = (system_dir / "03_judge.md").read_text(
                 encoding="utf-8"
             )
+            self._prompt_review = (system_dir / "04_review.md").read_text(
+                encoding="utf-8"
+            )
         else:
             self.logger.info("Prompt mode: merged (backward compatible)")
             self.prompt_onboarding = (prompts_dir / "00_onboarding.md").read_text(
@@ -106,20 +112,21 @@ class TutorEngine:
         In ``merged`` mode, returns the legacy single-file prompts.
 
         Args:
-            module: One of ``onboarding``, ``analyzer``, ``teach``, ``judge``.
+            module: One of ``onboarding``, ``analyzer``, ``teach``, ``judge``, ``review``.
 
         Returns:
             The full system prompt text.
         """
         if self._prompt_mode == "split":
             parts = [self._prompt_base]
-            if module in ("onboarding", "teach", "judge"):
+            if module in ("onboarding", "teach", "judge", "review"):
                 parts.append(self._prompt_persona)
             module_map = {
                 "onboarding": self._prompt_onboarding,
                 "analyzer": self._prompt_analyzer,
                 "teach": self._prompt_teach,
                 "judge": self._prompt_judge,
+                "review": self._prompt_review,
             }
             parts.append(module_map[module])
             return "\n\n---\n\n".join(parts)
@@ -402,18 +409,32 @@ class TutorEngine:
             parts.append(f"=== 生活类比 ===\n{chunk.analogy}")
 
         context = "\n\n".join(parts)
-        user_msg = (
-            f"请判断用户回答是否正确，并给出反馈。\n\n{context}\n\n"
-            "判断规则：\n"
-            "- 如果正确（答对或方向正确），标记 is_correct: true\n"
-            "- 如果错误，给出渐进式提示（hint_level 1-4）\n"
-            "- hint_level=1: 提供线索提示\n"
-            "- hint_level=2: 提供生活类比\n"
-            "- hint_level=3: 提供半解析\n"
-            "- hint_level=4+: 给出部分答案\n\n"
-            '请以 JSON 格式输出：\n'
-            '{\n  "is_correct": true/false,\n  "feedback": "反馈内容",\n  "hint_level": 1-4,\n  "action": "continue/next_chunk/complete"\n}'
-        )
+        if self._review_mode:
+            prompt_module = "review"
+            user_msg = (
+                f"请按复习模式判断用户是否仍然掌握该知识点。\n\n{context}\n\n"
+                "复习判卷规则：\n"
+                "- 如果用户抓住核心概念，is_correct=true，action=next_chunk\n"
+                "- 如果用户未通过，给 120 字以内短反馈\n"
+                "- 第一次未通过通常 action=continue，hint_level 递增到 1\n"
+                "- 如果当前提示层级已 >= 1 或明显卡住，action=next_chunk，hint_level=2\n\n"
+                '请以 JSON 格式输出：\n'
+                '{\n  "is_correct": true/false,\n  "feedback": "简短复习反馈",\n  "hint_level": 0-2,\n  "action": "continue/next_chunk"\n}'
+            )
+        else:
+            prompt_module = "judge"
+            user_msg = (
+                f"请判断用户回答是否正确，并给出反馈。\n\n{context}\n\n"
+                "判断规则：\n"
+                "- 如果正确（答对或方向正确），标记 is_correct: true\n"
+                "- 如果错误，给出渐进式提示（hint_level 1-4）\n"
+                "- hint_level=1: 提供线索提示\n"
+                "- hint_level=2: 提供生活类比\n"
+                "- hint_level=3: 提供半解析\n"
+                "- hint_level=4+: 给出部分答案\n\n"
+                '请以 JSON 格式输出：\n'
+                '{\n  "is_correct": true/false,\n  "feedback": "反馈内容",\n  "hint_level": 1-4,\n  "action": "continue/next_chunk/complete"\n}'
+            )
 
         history = self.memory.get_context_for_llm(count=5)
         if history:
@@ -422,7 +443,7 @@ class TutorEngine:
         from src.utils.config import get_config
         try:
             response = self._call_llm(
-                self._get_system_prompt("judge"),
+                self._get_system_prompt(prompt_module),
                 user_msg,
                 max_tokens=get_config().llm.judgment_max_tokens,
             )
@@ -433,7 +454,7 @@ class TutorEngine:
             parsed = {
                 "is_correct": False,
                 "feedback": f"⚠️ 判卷服务暂时不可用: {exc}\n\n你的答案是：{answer}\n\n正确答案是：{chunk.correct_answer}\n\n请对照答案自己判断一下，然后我们可以继续下一题。",
-                "hint_level": min(chunk.hint_level + 1, 4),
+                "hint_level": min(chunk.hint_level + 1, 2 if self._review_mode else 4),
                 "action": "continue",
             }
 
@@ -468,6 +489,20 @@ class TutorEngine:
         if action == "next_chunk":
             chunk.status = LearningStatus.NEEDS_REVIEW
             chunk.hint_level = 4
+            if self._review_mode:
+                self.state = TutorState.WAITING_ANSWER
+                review_msg = AIMessage(
+                    response_type=ResponseType.FEEDBACK_HINT,
+                    content=(
+                        f"{feedback}\n\n"
+                        "这个知识点先保留为待巩固，我们继续下一道复习题。"
+                    ),
+                    chunk_id=chunk.chunk_id,
+                    hint_level=chunk.hint_level,
+                    is_final=True,
+                )
+                self.memory.add_ai_message(review_msg)
+                return review_msg
             self.state = TutorState.TEACHING
             next_msg = self.next_chunk()
             self.memory.add_ai_message(next_msg)
@@ -557,6 +592,115 @@ class TutorEngine:
         self.logger.info(f"Jumped to chunk {chunk_number}/{self.topic_state.total_chunks}")
         self.state = TutorState.TEACHING
         return self._teach_current_chunk()
+
+    def start_review(self, topic_state: TopicState) -> AIMessage:
+        """Start review mode by asking weak knowledge points first."""
+        self.topic_state = topic_state
+        self._review_mode = True
+        self._review_queue = self._build_review_queue(topic_state)
+        self._review_position = 0
+        self.memory.add_user_message("/review-mode")
+        self.logger.info(
+            f"State: {self.state.value} -> WAITING_ANSWER, "
+            f"review_items={len(self._review_queue)}"
+        )
+
+        if not self._review_queue:
+            self.state = TutorState.COMPLETED
+            self._review_mode = False
+            return AIMessage(
+                response_type=ResponseType.EXPLANATION,
+                content="当前主题没有可复习的知识点。",
+                is_final=True,
+            )
+
+        return self._ask_current_review_chunk()
+
+    def next_review_chunk(self) -> AIMessage:
+        """Advance to the next review item without re-teaching the chunk."""
+        if not self.topic_state:
+            raise ValueError("Topic state not initialized")
+        if not self._review_mode:
+            raise ValueError("Review mode not started")
+
+        self._review_position += 1
+        if self._review_position >= len(self._review_queue):
+            self._review_mode = False
+            self.state = TutorState.COMPLETED
+            self.topic_state.updated_at = datetime.now()
+            self.topic_state.is_completed = True
+            return AIMessage(
+                response_type=ResponseType.EXPLANATION,
+                content="✅ 本轮复习完成。待巩固内容已经更新到当前主题进度里。",
+                is_final=True,
+            )
+
+        return self._ask_current_review_chunk()
+
+    def skip_review_chunk(self) -> AIMessage:
+        """Skip the current review item and keep it marked as needing review."""
+        if not self.topic_state:
+            raise ValueError("Topic state not initialized")
+        if not self._review_mode or not self._review_queue:
+            raise ValueError("Review mode not started")
+
+        idx = self._review_queue[self._review_position]
+        chunk = self.topic_state.chunks[idx]
+        chunk.status = LearningStatus.NEEDS_REVIEW
+        self.memory.add_user_message("/skip")
+        self.logger.info(f"Skipped review chunk {idx + 1}/{self.topic_state.total_chunks}")
+        return self.next_review_chunk()
+
+    def _ask_current_review_chunk(self) -> AIMessage:
+        """Ask the current review question directly."""
+        if not self.topic_state:
+            raise ValueError("Topic state not initialized")
+        idx = self._review_queue[self._review_position]
+        self.topic_state.current_chunk_index = idx
+        self.topic_state.updated_at = datetime.now()
+        chunk = self.topic_state.chunks[idx]
+        self.state = TutorState.WAITING_ANSWER
+        self.logger.info(
+            f"Reviewing chunk {idx + 1}/{self.topic_state.total_chunks}: {chunk.title}"
+        )
+        msg = AIMessage(
+            response_type=ResponseType.QUESTION,
+            content=(
+                f"复习模式 ({self._review_position + 1}/{len(self._review_queue)})："
+                "跳过讲解，直接验证这个知识点。"
+            ),
+            question=chunk.question,
+            options=chunk.options,
+            chunk_id=chunk.chunk_id,
+        )
+        self.memory.add_ai_message(msg)
+        return msg
+
+    def _build_review_queue(self, topic_state: TopicState) -> list[int]:
+        """Prioritize review chunks: weak points, unfinished items, then mastered items."""
+        weak: list[int] = []
+        unfinished: list[int] = []
+        mastered: list[int] = []
+
+        for idx, chunk in enumerate(topic_state.chunks):
+            if (
+                chunk.status == LearningStatus.NEEDS_REVIEW
+                or chunk.fail_count > 0
+                or chunk.hint_level > 0
+            ):
+                weak.append(idx)
+            elif chunk.status != LearningStatus.MASTERED:
+                unfinished.append(idx)
+            else:
+                mastered.append(idx)
+
+        return weak + unfinished + mastered
+
+    def get_review_progress(self) -> str:
+        """Return progress in the current review queue."""
+        if not self._review_mode or not self._review_queue:
+            return "未开始"
+        return f"{self._review_position + 1}/{len(self._review_queue)}"
 
     def restore_memory(self, messages: list[dict]) -> None:
         """Restore conversation memory from persisted history."""

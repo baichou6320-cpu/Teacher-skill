@@ -39,6 +39,9 @@ class FakeStorage:
     def load_conversation_history(self, topic_id: str) -> dict:
         return {"messages": [{"role": "user", "content": "previous answer"}]}
 
+    def list_topics(self) -> list[str]:
+        return [self.topic_state.topic_id]
+
     def load_user_profile(self) -> dict | None:
         return self.saved_profile or self.profile
 
@@ -206,12 +209,129 @@ def make_multi_topic_state() -> TopicState:
 
 def make_app(engine: FakeEngine | None = None):
     """Create a TeacherSkillApp instance without running __init__."""
+    main.load_runtime_dependencies()
     app = main.TeacherSkillApp.__new__(main.TeacherSkillApp)
     app.user_id = "user_test"
     app.current_engine = engine
     app.user_level = "beginner"
+    app._pending_review_topic_id = None
     app.logger = DummyLogger()
     return app
+
+
+class TestEnvironmentCheck:
+    """Tests for the startup environment check."""
+
+    def test_initialize_project_creates_env_and_runtime_dirs(self, tmp_path):
+        (tmp_path / ".env.example").write_text(
+            "ANTHROPIC_API_KEY=your_api_key_here\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "config.yaml").write_text(
+            "paths:\n  data_dir: ./custom-data\n  logs_dir: ./custom-logs\n",
+            encoding="utf-8",
+        )
+        samples_dir = tmp_path / "samples"
+        samples_dir.mkdir()
+        (samples_dir / "demo_article.md").write_text("demo", encoding="utf-8")
+
+        actions, ok = main.initialize_project(project_root=tmp_path)
+
+        assert ok is True
+        assert (tmp_path / ".env").read_text(encoding="utf-8") == (
+            "ANTHROPIC_API_KEY=your_api_key_here\n"
+        )
+        assert (tmp_path / "custom-data").is_dir()
+        assert (tmp_path / "custom-logs").is_dir()
+        assert any(action["item"] == ".env" and action["status"] == "已创建" for action in actions)
+
+    def test_initialize_project_keeps_existing_env(self, tmp_path):
+        (tmp_path / ".env.example").write_text(
+            "ANTHROPIC_API_KEY=your_api_key_here\n",
+            encoding="utf-8",
+        )
+        (tmp_path / ".env").write_text(
+            "ANTHROPIC_API_KEY=sk-existing\n",
+            encoding="utf-8",
+        )
+
+        actions, ok = main.initialize_project(project_root=tmp_path)
+
+        assert ok is True
+        assert (tmp_path / ".env").read_text(encoding="utf-8") == (
+            "ANTHROPIC_API_KEY=sk-existing\n"
+        )
+        assert any(action["item"] == ".env" and action["status"] == "已存在" for action in actions)
+
+    def test_collect_environment_checks_reports_missing_api_key(self, monkeypatch, tmp_path):
+        (tmp_path / "config.yaml").write_text(
+            "llm:\n  model_id: test-model\n",
+            encoding="utf-8",
+        )
+        samples_dir = tmp_path / "samples"
+        samples_dir.mkdir()
+        (samples_dir / "demo_article.md").write_text("demo", encoding="utf-8")
+        monkeypatch.setattr(main.importlib.util, "find_spec", lambda module: object())
+
+        checks, ready = main.collect_environment_checks(env={}, project_root=tmp_path)
+
+        api_check = next(check for check in checks if check["name"] == "ANTHROPIC_API_KEY")
+        assert ready is False
+        assert api_check["passed"] is False
+        assert "未配置" in api_check["detail"]
+
+    def test_collect_environment_checks_passes_when_required_items_exist(self, monkeypatch, tmp_path):
+        (tmp_path / "config.yaml").write_text(
+            "llm:\n  model_id: test-model\nteaching:\n  prompt_mode: split\n",
+            encoding="utf-8",
+        )
+        samples_dir = tmp_path / "samples"
+        samples_dir.mkdir()
+        (samples_dir / "demo_article.md").write_text("demo", encoding="utf-8")
+        monkeypatch.setattr(main.importlib.util, "find_spec", lambda module: object())
+
+        checks, ready = main.collect_environment_checks(
+            env={"ANTHROPIC_API_KEY": "sk-test"},
+            project_root=tmp_path,
+        )
+
+        config_check = next(check for check in checks if check["name"] == "config.yaml")
+        assert ready is True
+        assert config_check["passed"] is True
+        assert "test-model" in config_check["detail"]
+
+    def test_config_check_falls_back_when_yaml_dependencies_are_missing(self, monkeypatch, tmp_path):
+        (tmp_path / "config.yaml").write_text(
+            "\n".join(
+                [
+                    "llm:",
+                    '  model_id: "fallback-model"',
+                    "teaching:",
+                    '  prompt_mode: "split"',
+                    "paths:",
+                    '  data_dir: "./data"',
+                    '  logs_dir: "./logs"',
+                ]
+            ),
+            encoding="utf-8",
+        )
+        samples_dir = tmp_path / "samples"
+        samples_dir.mkdir()
+        (samples_dir / "demo_article.md").write_text("demo", encoding="utf-8")
+        monkeypatch.setattr(main.importlib.util, "find_spec", lambda module: None)
+
+        checks, ready = main.collect_environment_checks(
+            env={"ANTHROPIC_API_KEY": "sk-test"},
+            project_root=tmp_path,
+        )
+
+        config_check = next(check for check in checks if check["name"] == "config.yaml")
+        runtime_check = next(check for check in checks if check["name"] == "运行依赖")
+        assert ready is False
+        assert config_check["passed"] is True
+        assert "fallback-model" in config_check["detail"]
+        assert "轻量解析" in config_check["detail"]
+        assert runtime_check["passed"] is False
 
 
 class TestResumeTopicFlow:
@@ -242,6 +362,39 @@ class TestResumeTopicFlow:
         ]
         app._learning_loop.assert_called_once()
         app._show_summary.assert_called_once()
+
+
+class TestReviewIntentSelection:
+    """Tests for natural-language review entry matching."""
+
+    def test_select_topic_can_match_review_request_from_history(self, monkeypatch):
+        topic_state = make_topic_state()
+        topic_state.title = "Transformer 自注意力机制"
+        app = make_app()
+        app.storage = FakeStorage(
+            topic_state,
+            profile={
+                "user_id": "user_test",
+                "level": "beginner",
+                "history_topics": [
+                    {
+                        "topic_id": "topic_test",
+                        "title": "Transformer 自注意力机制",
+                        "summary": "理解自注意力的并行计算",
+                        "completed_at": "2026-05-03T10:00:00",
+                        "total_chunks": 3,
+                        "mastered_chunks": 2,
+                        "review_chunks": 1,
+                    }
+                ],
+            },
+        )
+        monkeypatch.setattr(main.console, "input", lambda prompt: "复习一下 transformer")
+
+        selected = app._select_topic_or_new()
+
+        assert selected == "topic_test"
+        assert app._pending_review_topic_id == "topic_test"
 
 
 class TestLearningLoopCompletion:
@@ -556,6 +709,97 @@ class TestHistoryArchive:
         assert archived["review_chunks"] == 1
         assert archived["source_path"] == "notes/transformer.md"
 
+    def test_record_review_completion_updates_profile_review_metadata(self):
+        topic_state = make_multi_topic_state()
+        topic_state.title = "Transformer 入门"
+        topic_state.summary = "注意力机制基础"
+        topic_state.source_type = "file"
+        topic_state.source_path = "notes/transformer.md"
+        topic_state.chunks[0].status = LearningStatus.MASTERED
+        topic_state.chunks[1].status = LearningStatus.NEEDS_REVIEW
+        topic_state.chunks[2].status = LearningStatus.MASTERED
+        storage = FakeStorage(
+            topic_state,
+            profile={
+                "user_id": "user_test",
+                "level": "beginner",
+                "history_topics": [
+                    {
+                        "topic_id": "topic_test",
+                        "title": "旧标题",
+                        "completed_at": "2026-05-01T10:00:00",
+                        "total_chunks": 3,
+                        "mastered_chunks": 1,
+                        "review_chunks": 2,
+                    }
+                ],
+            },
+        )
+        app = make_app()
+        app.storage = storage
+
+        app._record_review_completion(topic_state)
+
+        saved = storage.saved_profile
+        assert saved is not None
+        archived = saved["history_topics"][0]
+        assert archived["title"] == "Transformer 入门"
+        assert archived["mastered_chunks"] == 2
+        assert archived["review_chunks"] == 1
+        assert archived["source_path"] == "notes/transformer.md"
+        assert archived["last_reviewed_at"]
+
+
+class TestReviewSummary:
+    """Tests for review summary bookkeeping."""
+
+    def test_record_review_result_counts_review_actions(self):
+        app = make_app()
+        stats = app._new_review_stats()
+
+        app._record_review_result(
+            stats,
+            AIMessage(response_type=ResponseType.FEEDBACK_CORRECT, content="ok"),
+        )
+        app._record_review_result(
+            stats,
+            AIMessage(
+                response_type=ResponseType.FEEDBACK_HINT,
+                content="keep reviewing",
+                is_final=True,
+            ),
+        )
+        app._record_review_result(
+            stats,
+            AIMessage(response_type=ResponseType.DIRECT_ANSWER, content="answer"),
+            is_direct=True,
+        )
+        app._record_review_result(
+            stats,
+            AIMessage(response_type=ResponseType.EXPLANATION, content="skipped"),
+            is_skipped=True,
+        )
+
+        assert stats == {
+            "answered": 2,
+            "correct": 1,
+            "direct": 1,
+            "skipped": 1,
+            "kept_review": 3,
+        }
+
+    def test_remaining_review_items_excludes_mastered_old_failures(self):
+        app = make_app()
+        topic_state = make_multi_topic_state()
+        topic_state.chunks[0].status = LearningStatus.MASTERED
+        topic_state.chunks[0].fail_count = 2
+        topic_state.chunks[1].status = LearningStatus.NEEDS_REVIEW
+        topic_state.chunks[2].fail_count = 1
+
+        remaining = app._remaining_review_items(topic_state)
+
+        assert [i for i, _ in remaining] == [2, 3]
+
 
 class TestMaterialInput:
     """Tests for improved material input flow."""
@@ -586,6 +830,48 @@ class TestMaterialInput:
 
         assert material == "file material"
         app._load_material_from_file.assert_called_once_with("article.md")
+
+
+class TestDemoMode:
+    """Tests for built-in demo material flow."""
+
+    def test_run_demo_skips_topic_selection_and_starts_demo(self):
+        app = make_app()
+        app.start = Mock(return_value=True)
+        app._run_onboarding = Mock(return_value="beginner")
+        app._start_demo_topic = Mock()
+        app._select_topic_or_new = Mock()
+
+        app.run(demo=True)
+
+        app._start_demo_topic.assert_called_once_with("beginner")
+        app._select_topic_or_new.assert_not_called()
+
+    def test_start_demo_topic_uses_builtin_material(self):
+        app = make_app()
+        app._load_demo_material = Mock(return_value="demo material")
+        app._start_new_topic = Mock()
+
+        app._start_demo_topic("beginner")
+
+        app._start_new_topic.assert_called_once_with(
+            "beginner",
+            material="demo material",
+            source_type="demo",
+        )
+
+    def test_demo_source_label_is_readable(self):
+        app = make_app()
+
+        assert app._topic_source_label({"source_type": "demo"}) == "内置示例"
+
+    def test_load_demo_material_reads_sample_article(self):
+        app = make_app()
+
+        material = app._load_demo_material()
+
+        assert material is not None
+        assert "番茄工作法" in material
 
 
 class TestTopicMetadata:

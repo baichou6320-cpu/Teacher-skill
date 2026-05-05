@@ -28,9 +28,16 @@ class FakeMemory:
 
     def __init__(self):
         self.user_messages: list[str] = []
+        self.ai_messages: list[AIMessage] = []
 
     def add_user_message(self, content: str, answer=None) -> None:
         self.user_messages.append(content)
+
+    def add_ai_message(self, message: AIMessage) -> None:
+        self.ai_messages.append(message)
+
+    def get_context_for_llm(self, count: int = 5) -> str:
+        return ""
 
 
 def make_topic_state(current_index: int = 0) -> TopicState:
@@ -60,6 +67,9 @@ def make_engine(topic_state: TopicState) -> TutorEngine:
     engine.topic_id = topic_state.topic_id
     engine.state = TutorState.WAITING_ANSWER
     engine.topic_state = topic_state
+    engine._review_mode = False
+    engine._review_queue = []
+    engine._review_position = 0
     engine.memory = FakeMemory()
     engine.logger = DummyLogger()
 
@@ -160,3 +170,80 @@ def test_analyze_material_saves_readable_topic_metadata():
     assert topic_state.summary == "理解注意力机制和编码器结构"
     assert topic_state.material_chars == len("material text")
     assert topic_state.total_chunks == 1
+
+
+def test_start_review_prioritizes_weak_chunks_without_teaching():
+    topic_state = make_topic_state()
+    topic_state.chunks[0].status = LearningStatus.MASTERED
+    topic_state.chunks[1].status = LearningStatus.NEEDS_REVIEW
+    topic_state.chunks[2].fail_count = 1
+    engine = make_engine(topic_state)
+
+    response = engine.start_review(topic_state)
+
+    assert engine._review_queue == [1, 2, 0]
+    assert topic_state.current_chunk_index == 1
+    assert response.response_type == ResponseType.QUESTION
+    assert response.question == "Question 2?"
+    assert response.content.startswith("复习模式")
+    assert engine.get_review_progress() == "1/3"
+
+
+def test_next_review_chunk_advances_without_calling_teach():
+    topic_state = make_topic_state()
+    topic_state.chunks[0].status = LearningStatus.NEEDS_REVIEW
+    engine = make_engine(topic_state)
+    engine.start_review(topic_state)
+
+    response = engine.next_review_chunk()
+
+    assert response.response_type == ResponseType.QUESTION
+    assert topic_state.current_chunk_index == 1
+    assert response.question == "Question 2?"
+
+
+def test_skip_review_chunk_marks_needs_review_and_completes_queue():
+    topic_state = make_topic_state()
+    topic_state.chunks = topic_state.chunks[:1]
+    topic_state.total_chunks = 1
+    engine = make_engine(topic_state)
+    engine.start_review(topic_state)
+
+    response = engine.skip_review_chunk()
+
+    assert topic_state.chunks[0].status == LearningStatus.NEEDS_REVIEW
+    assert response.is_final is True
+    assert engine._review_mode is False
+
+
+def test_review_answer_uses_review_prompt_for_judgment():
+    topic_state = make_topic_state()
+    topic_state.chunks[0].status = LearningStatus.NEEDS_REVIEW
+    engine = make_engine(topic_state)
+    engine.start_review(topic_state)
+
+    prompts_used: list[str] = []
+    engine._get_system_prompt = lambda module: module
+
+    def fake_call_llm(system_prompt: str, user_message: str, max_tokens=None) -> str:
+        prompts_used.append(system_prompt)
+        assert "复习模式" in user_message
+        return "{}"
+
+    class FakeTranslator:
+        def parse_judgment(self, response: str) -> dict:
+            return {
+                "is_correct": False,
+                "feedback": "短提示",
+                "hint_level": 1,
+                "action": "continue",
+            }
+
+    engine._call_llm = fake_call_llm
+    engine.translator = FakeTranslator()
+
+    response = engine.receive_answer("不确定", is_direct=False)
+
+    assert prompts_used == ["review"]
+    assert response.response_type == ResponseType.FEEDBACK_WRONG
+    assert response.content == "短提示"

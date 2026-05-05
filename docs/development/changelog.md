@@ -14,7 +14,10 @@
   - 恢复主题不会重复启动教学
   - 最后一题答对后正常退出学习循环
   - 最后一题使用 `/direct` 后正常退出学习循环
-- 本地单元测试已通过：`pytest tests/unit/`，102/102 ✅
+- 扩展 `tests/unit/test_main_flow.py`，覆盖复习报告统计、复习完成后 profile 元数据更新、已重新掌握的旧错题不再计入薄弱点。
+- 扩展 `tests/unit/test_main_flow.py`，覆盖 `--check` 启动环境检查的缺 API Key 与配置正常两类情况。
+- 扩展 `tests/unit/test_main_flow.py`，覆盖 `--init` 初始化 `.env`、运行目录，以及不覆盖已有 `.env` 的行为。
+- 此前本地单元测试已通过：`pytest tests/unit/`，102/102 ✅；本次复习报告改动需在补齐 pytest 环境后重新验证。
 
 **修复**
 - 修复 `main.py` Windows 输出编码处理：改用 `sys.stdout.reconfigure()` / `sys.stderr.reconfigure()`，避免 pytest 捕获流被替换后出现 `lost sys.stderr`。
@@ -35,7 +38,16 @@
 - 新增发布检查清单：`docs/development/release-checklist.md`。
 
 **体验**
+- 新增 `python main.py --demo` 示例模式，使用内置短文体验完整学习闭环，降低第一次试用门槛。
+- 新增 `python main.py --init` 项目初始化入口：自动创建 `.env`、数据目录和日志目录，且不会覆盖已有 `.env`。
+- 新增 `python main.py --check` 启动环境检查，集中检查 API Key、`config.yaml`、运行依赖、测试依赖和 demo 示例材料，并给出修复建议。
+- 优化 `--check`：当 `PyYAML` / `pydantic` 尚未安装时，改用标准库轻量解析 `config.yaml`，避免把“依赖未安装”误报成“配置文件读取失败”。
 - 推荐 `python main.py --file <路径>` 作为主要学习入口。
+- 新增自然语言复习入口：识别“复习一下 xxx”，从 `history_topics` 匹配历史主题。
+- 新增复习模式基础版：匹配主题后跳过重新讲解，优先提问待巩固、答错过或用过提示的知识点。
+- 新增复习专用 Prompt：`prompts/system/04_review.md`，复习判卷采用短反馈和快推进策略。
+- 新增复习结束报告：显示本轮作答、答对、速查、跳过、仍待巩固数量，并列出复习后仍需要巩固的知识点。
+- 复习完成后更新 `profile.history_topics.last_reviewed_at`、掌握数和待巩固数，`/history` 增加“上次复习”列。
 - 新主题输入阶段支持 `/load <路径>` 加载文件，不再默认要求粘贴文本后输入 `/done`。
 - 多行粘贴改为显式 `/paste` 模式，降低普通输入时的困惑。
 - 学习过程中支持 `/load <路径>` 追加材料，新材料会分析成新的知识点并追加到当前 topic。
