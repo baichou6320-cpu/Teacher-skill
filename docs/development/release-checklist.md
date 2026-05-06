@@ -25,6 +25,7 @@ Confirm these files or directories are absent from the release artifact and not 
 - [x] `data/users/`
 - [x] `__pycache__/`
 - [x] `.pytest_cache/`
+- [x] `.tmp/`
 - [x] `debug_output.txt`
 - [x] local editor or host settings that contain personal paths or permissions
 
@@ -40,7 +41,7 @@ python main.py
 For file loading:
 
 ```bash
-python main.py --file tests/integration/sample_article.md
+python main.py --file samples/sample_article.md
 ```
 
 ## Release Notes Template

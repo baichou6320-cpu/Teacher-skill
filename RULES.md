@@ -96,9 +96,10 @@ Teacher-skill/
 │       └── logger.py       # 日志系统（按日期轮转）
 │       └── file_loader.py  # 文件加载器（md/txt/pdf）← Phase 2 新增
 ├── models/                 # Pydantic 数据模型
-├── prompts/                # Prompt 模板（给 LLM 看的）
-├── tests/                  # 测试脚本
-├── docs/                   # 📄 项目文档（按编号顺序阅读）
+├── prompts/                # 当前 split Prompt；legacy/ 为旧版兼容
+├── tests/unit/             # 单元测试（无需 API Key）
+├── scripts/                # 手动烟测和开发调试脚本
+├── docs/                   # 📄 产品、安装、演示、开发和归档文档
 └── data/                   # 用户数据（JSON 存储，不入 git）
 ```
 
@@ -131,11 +132,12 @@ Teacher-skill/
 ## 7. 快速验证
 
 ```bash
-# 端到端测试
-python tests/test_e2e.py
+# 单元测试（无需 API Key）
+pytest tests/unit/
 
-# 教学循环全流程测试
-python tests/test_tutoring_loop.py
+# LLM 烟测（需要 API Key）
+python scripts/smoke/llm_e2e_check.py
+python scripts/smoke/tutoring_loop_check.py
 
 # 直接运行主程序
 python main.py
@@ -148,6 +150,11 @@ python main.py --file ./your_material.md
 
 ## 8. 最近一次修改
 
+- **2026-05-06**：整理公开仓库结构
+  - `docs/archive/` 收纳个人学习笔记和历史材料
+  - `scripts/smoke/` 收纳需要 API Key 的手动烟测脚本
+  - `scripts/dev/` 收纳 prompt 和解析器调试脚本
+  - `prompts/legacy/` 收纳旧版 merged prompt
 - **2026-04-29**：完成文件输入功能（`.md` / `.txt` / `.pdf` 支持）
   - 新增 `src/utils/file_loader.py`
   - `main.py` 支持 `--file` 命令行参数 + `/load` 交互命令

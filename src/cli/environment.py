@@ -14,7 +14,8 @@ def collect_environment_checks(
     project_root: Path | None = None,
 ) -> tuple[list[dict[str, object]], bool]:
     """Collect startup checks without entering the learning flow."""
-    env = env or os.environ
+    if env is None:
+        env = os.environ
     project_root = project_root or Path.cwd()
     checks: list[dict[str, object]] = []
 
@@ -370,4 +371,3 @@ def render_environment_check(
             )
         )
     return is_ready
-

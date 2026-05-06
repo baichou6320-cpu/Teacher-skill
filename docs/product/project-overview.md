@@ -240,6 +240,10 @@ prompts/
 │   ├── 02_teach.md       # 讲解 + 提问
 │   ├── 03_judge.md       # 判卷 + 渐进提示
 │   └── 04_review.md      # 复习判卷 + 短反馈
+├── legacy/               # 旧版 merged prompt，保留向后兼容
+│   ├── 00_onboarding.md
+│   ├── 01_analyzer.md
+│   └── 02_tutor_core.md
 └── personas/             # 风格扩展层（Phase 3）
     ├── gentle_mentor.md  # 默认风格
     ├── strict_teacher.md # 严师模式
@@ -273,7 +277,7 @@ engine.py 根据当前场景，自动拼接对应的 Prompt 层：
 ### 向后兼容
 
 `config.yaml` 中 `prompt_mode: "split"`（默认）使用分层架构。
-设置为 `"merged"` 可切回旧的 `02_tutor_core.md`。
+设置为 `"merged"` 可切回旧的 `prompts/legacy/02_tutor_core.md`。
 
 ---
 

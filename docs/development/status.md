@@ -20,7 +20,7 @@
 - Prompt 分层架构（base + persona + system module）✅
 - 单元测试无需 API Key 即可运行；本次 CLI 可用性改动新增测试后，需重新跑本地或 CI 确认 ✅
 - 标准 Agent Skill 结构已建立：`skills/heuristic-teacher/SKILL.md` ✅
-- README 已精简为项目入口，文档已按 product/development/learning-notes/install 分区 ✅
+- README 已精简为项目入口，文档已按 product/development/install/demo/archive 分区 ✅
 - GitHub Actions 单测工作流已通过 ✅
 - `.env.example` 与 `config.yaml` 配置说明已校准：API Key/base_url 在 `.env`，模型参数在 `config.yaml` ✅
 - 安装和配置文档已完善：`docs/install/README.md` ✅
@@ -50,7 +50,7 @@
 | 进度恢复 | `main.py` | ✅ 已可用 | 数字选择恢复 / `new` 创建新主题 |
 | 历史持久化 | `main.py` `_save_progress()` | ✅ 已可用 | 保存 `state.json` + `history.json` |
 | CLI 辅助模块 | `src/cli/environment.py`、`src/cli/display.py`、`src/cli/review.py` | ✅ 已拆分 | 启动检查、控制台渲染、复习 CLI 从 `main.py` 分离 |
-| 单元测试 | `tests/unit/` × 8 文件 | 🚧 部分本地验证通过 | 当前 Codex 环境仍受 Windows 临时目录权限影响，`tmp_path` 类测试无法完整跑；已验证 `test_main_flow.py` 非环境子集、`test_router.py`、`test_engine_navigation.py`、`main.py --check` |
+| 单元测试 | `tests/unit/` | ✅ 通过 | 本地虚拟环境下 `148/148 passed` |
 | Agent Skill | `skills/heuristic-teacher/SKILL.md` | ✅ 已建立 | 独立于产品文档，包含工作流与验证标准 |
 | CI | `.github/workflows/tests.yml` | ✅ 通过 | GitHub Actions `Tests` workflow 已跑绿 |
 
@@ -85,8 +85,8 @@
 # 单元测试（无需 API Key，CI 可用；本次 CLI 可用性改动后请重新运行）
 pytest tests/unit/
 
-# 端到端测试（需要 API Key）
-python tests/integration/test_e2e.py
+# LLM 烟测（需要 API Key）
+python scripts/smoke/llm_e2e_check.py
 
 # 直接运行主程序
 python main.py

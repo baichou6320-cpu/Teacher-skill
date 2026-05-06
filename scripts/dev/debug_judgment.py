@@ -1,9 +1,11 @@
 """调试脚本 — 手动调用判卷逻辑，打印原始响应和解析结果。"""
 import os
 import sys
+from pathlib import Path
 
 # Bootstrap environment
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT))
 import tests  # noqa: F401
 
 from src.core.engine import TutorEngine
@@ -55,7 +57,7 @@ user_msg = (
     '{\n  "is_correct": true/false,\n  "feedback": "反馈内容",\n  "hint_level": 1-4,\n  "action": "continue/next_chunk/complete"\n}'
 )
 
-response = engine._call_llm(engine.prompt_tutor, user_msg, max_tokens=1024)
+response = engine._call_llm(engine._get_system_prompt("judge"), user_msg, max_tokens=1024)
 print("\n=== LLM 原始响应 ===")
 print(response)
 

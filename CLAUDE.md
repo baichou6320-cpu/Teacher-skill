@@ -134,8 +134,9 @@ Teacher-skill/
 │       ├── config.py      # 配置管理
 │       └── logger.py      # 日志
 ├── models/                # 数据模型（Pydantic）
-├── prompts/               # Prompt 模板（给 LLM 看的）
-├── tests/                 # 测试
+├── prompts/               # 当前 split Prompt；legacy/ 为旧版兼容
+├── tests/unit/            # 单元测试
+├── scripts/               # 手动烟测和开发调试脚本
 ├── data/                  # 用户数据（JSON）
 └── docs/                  # 项目文档
 ```

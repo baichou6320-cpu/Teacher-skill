@@ -127,7 +127,7 @@ LLM API key.
 Recommended file-based mode:
 
 ```bash
-python main.py --file tests/integration/sample_article.md
+python main.py --file samples/sample_article.md
 ```
 
 Interactive mode:
@@ -163,11 +163,11 @@ Unit tests do not need an API key:
 pytest tests/unit/
 ```
 
-Integration tests need a real API key:
+LLM smoke scripts need a real API key:
 
 ```bash
-python tests/integration/test_e2e.py
-python tests/integration/test_tutoring_loop.py
+python scripts/smoke/llm_e2e_check.py
+python scripts/smoke/tutoring_loop_check.py
 ```
 
 ## Data and Logs

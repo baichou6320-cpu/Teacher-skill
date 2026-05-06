@@ -15,9 +15,9 @@
 - [x] 工程基建（日志、配置、错误处理）
 - [x] 文件输入（.md/.txt/.pdf）
 - [x] Prompt 分层架构（split/merged 双模式）
-- [x] 单元测试 102 个全部通过
+- [x] 单元测试 148 个全部通过
 - [x] LICENSE（MIT）
-- [x] tests/ 目录整理（unit / integration 分离）
+- [x] tests/ 目录聚焦单元测试，LLM 烟测脚本移入 `scripts/smoke/`
 - [x] README 精简为项目入口
 - [x] 状态文档同步
 - [x] 标准 Agent Skill 结构：`skills/heuristic-teacher/SKILL.md`

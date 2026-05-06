@@ -5,6 +5,20 @@
 
 ---
 
+## 2026-05-06 — 公开仓库结构整理
+
+**整理**
+- 将个人学习笔记从 `docs/learning-notes/` 归档到 `docs/archive/learning-notes/`。
+- 将手动 LLM 烟测脚本移动到 `scripts/smoke/`，将开发调试脚本移动到 `scripts/dev/`。
+- 将旧版 merged prompt 移动到 `prompts/legacy/`，默认 split prompt 结构保持在 `prompts/system/`。
+- 将示例学习材料移动到 `samples/sample_article.md`，方便下载后直接试用。
+
+**文档**
+- 新增 `docs/README.md`、`scripts/README.md`、`prompts/README.md`，补齐目录导航。
+- 更新 README、安装文档、发布清单和项目规则中的旧路径。
+
+---
+
 ## [未发布] — v0.2.0 发布准备
 
 > 详见 [docs/product/roadmap.md](../product/roadmap.md)
@@ -35,7 +49,7 @@
 - README 精简为项目入口页。
 - 新增完整安装和配置说明：`docs/install/README.md`。
 - 新建标准 Agent Skill 结构：`skills/heuristic-teacher/SKILL.md`。
-- 重整文档目录为 `docs/product/`、`docs/development/`、`docs/learning-notes/`、`docs/install/`。
+- 重整文档目录为 `docs/product/`、`docs/development/`、`docs/install/`；学习笔记后续归档到 `docs/archive/learning-notes/`。
 - 新增发布检查清单：`docs/development/release-checklist.md`。
 
 **体验**
@@ -89,8 +103,8 @@
 - 多次答错后流程卡死 → 自动标记 `NEEDS_REVIEW` 并推进到下一知识点
 
 **测试**
-- 新增 `tests/test_tutoring_loop.py` — 教学循环全流程测试
-- `test_debug.py`、`test_e2e.py`、`test_tutoring_loop.py` 全部验证通过 ✅
+- 新增教学循环全流程测试脚本（当前归档为 `scripts/smoke/tutoring_loop_check.py`）。
+- 调试和端到端脚本已归档到 `scripts/dev/` 与 `scripts/smoke/`。
 
 ---
 

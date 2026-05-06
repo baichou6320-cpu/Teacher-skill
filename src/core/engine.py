@@ -94,13 +94,14 @@ class TutorEngine:
             )
         else:
             self.logger.info("Prompt mode: merged (backward compatible)")
-            self.prompt_onboarding = (prompts_dir / "00_onboarding.md").read_text(
+            legacy_dir = prompts_dir / "legacy"
+            self.prompt_onboarding = (legacy_dir / "00_onboarding.md").read_text(
                 encoding="utf-8"
             )
-            self.prompt_analyzer = (prompts_dir / "01_analyzer.md").read_text(
+            self.prompt_analyzer = (legacy_dir / "01_analyzer.md").read_text(
                 encoding="utf-8"
             )
-            self.prompt_tutor = (prompts_dir / "02_tutor_core.md").read_text(
+            self.prompt_tutor = (legacy_dir / "02_tutor_core.md").read_text(
                 encoding="utf-8"
             )
 

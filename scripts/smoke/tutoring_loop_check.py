@@ -1,9 +1,11 @@
 """教学循环测试 — 验证讲解→提问→反馈→推进的完整流程。"""
 import os
 import sys
+from pathlib import Path
 
 # Bootstrap environment
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT))
 import tests  # noqa: F401
 
 from src.core.engine import TutorEngine

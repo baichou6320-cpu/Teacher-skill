@@ -4,7 +4,8 @@ import sys
 from pathlib import Path
 
 # Bootstrap environment
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT))
 import tests  # noqa: F401
 
 from src.llm.client import LLMClient
@@ -14,7 +15,9 @@ from src.llm.translator import ResponseTranslator
 client = LLMClient()
 translator = ResponseTranslator()
 
-prompt_analyzer = Path("prompts/01_analyzer.md").read_text(encoding="utf-8")
+prompt_analyzer = (PROJECT_ROOT / "prompts" / "legacy" / "01_analyzer.md").read_text(
+    encoding="utf-8"
+)
 material = (
     "Transformer是一种革命性的深度学习架构，"
     "它在2017年的论文《Attention Is All You Need》中被提出。"

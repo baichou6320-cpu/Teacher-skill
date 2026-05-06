@@ -3,8 +3,10 @@ import os
 
 # Bootstrap environment (adds project root to sys.path, fixes UTF-8, loads .env)
 import sys
+from pathlib import Path
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT))
 import tests  # noqa: F401
 
 from src.core.engine import TutorEngine

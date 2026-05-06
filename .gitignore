@@ -75,6 +75,7 @@ venv.bak/
 
 # Project specific
 logs/
+.tmp/
 *.log
 data/users/
 吴颉航-简历*.pdf

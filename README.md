@@ -42,6 +42,7 @@ Teacher-skill 不是一个更快的总结器。它的目标是解决学习里的
 | 核心教学闭环 | 可用 |
 | CLI 初始化 | `python main.py --init` |
 | 环境检查 | `python main.py --check` |
+| 固定 3 分钟演示 | `python demo_full_loop.py` |
 | Demo 体验 | `python main.py --demo` |
 | 文件输入 | `.md` / `.txt` / `.pdf` |
 | 学习控制命令 | `/progress`、`/list`、`/skip`、`/back`、`/jump`、`/direct` |
@@ -52,7 +53,7 @@ Teacher-skill 不是一个更快的总结器。它的目标是解决学习里的
 
 ## 快速开始
 
-需要 Python 3.11+、Git，以及一个 Anthropic 兼容 API Key。
+需要 Python 3.11+ 和 Git。固定 3 分钟演示不依赖 API；真实学习流程需要一个 Anthropic 兼容 API Key。
 
 ```bash
 git clone https://github.com/baichou6320-cpu/Teacher-skill.git
@@ -61,6 +62,7 @@ cd Teacher-skill
 python main.py --init
 python -m pip install -r requirements.txt
 python main.py --check
+python demo_full_loop.py
 python main.py --demo
 ```
 
@@ -92,9 +94,19 @@ llm:
   model_id: "kimi-k2.5"
 ```
 
-## 三种启动方式
+## 四种启动方式
 
-### 1. 先跑 Demo
+### 1. 固定 3 分钟演示
+
+适合给老板、评审或面试官展示：固定流程、固定数据、不依赖 API、不等待现场输入。
+
+```bash
+python demo_full_loop.py
+```
+
+配套话术见 [`docs/demo/three-minute-demo.md`](docs/demo/three-minute-demo.md)。
+
+### 2. 先跑真实 Demo
 
 适合第一次体验，不需要准备材料，但仍需要 API Key。
 
@@ -104,7 +116,7 @@ python main.py --demo
 
 Demo 会使用内置短文 `samples/demo_article.md`，带你走完整个学习闭环。
 
-### 2. 从文件开始学习
+### 3. 从文件开始学习
 
 推荐正式使用时走这个入口。
 
@@ -120,7 +132,7 @@ python main.py --file article.md
 .pdf
 ```
 
-### 3. 进入交互模式
+### 4. 进入交互模式
 
 适合已有历史主题、想恢复进度、想复习旧内容，或想手动粘贴材料。
 
@@ -218,11 +230,12 @@ Teacher-skill/
 │   ├── core/                       # 教学状态机、记忆、奖励、路由
 │   ├── llm/                        # LLM 客户端、异常、响应解析
 │   └── utils/                      # 配置、文件加载、日志、存储
-├── prompts/                        # 分层 Prompt
-├── samples/                        # 内置 demo 学习材料
+├── prompts/                        # 当前 split Prompt，legacy/ 为旧版兼容
+├── samples/                        # 内置 demo 和示例学习材料
 ├── skills/heuristic-teacher/       # 标准 Agent Skill
-├── tests/                          # 单元测试和集成测试
-└── docs/                           # 产品、开发、安装和学习笔记
+├── tests/unit/                     # 无需 API Key 的单元测试
+├── scripts/                        # 手动烟测和开发调试脚本
+└── docs/                           # 产品、安装、演示、开发和归档文档
 ```
 
 ## 架构概览
@@ -267,11 +280,11 @@ skills/heuristic-teacher/SKILL.md
 pytest tests/unit/
 ```
 
-集成测试需要真实 LLM API Key：
+真实 LLM 烟测需要 API Key：
 
 ```bash
-python tests/integration/test_e2e.py
-python tests/integration/test_tutoring_loop.py
+python scripts/smoke/llm_e2e_check.py
+python scripts/smoke/tutoring_loop_check.py
 ```
 
 发布前建议至少跑：
@@ -339,7 +352,7 @@ pytest tests/unit/
 | [当前状态](docs/development/status.md) | 当前可用能力和待办 |
 | [发布检查清单](docs/development/release-checklist.md) | 发布前检查项 |
 | [变更日志](docs/development/changelog.md) | 重要改动记录 |
-| [学习笔记](docs/learning-notes/README.md) | 项目学习沉淀 |
+| [归档资料](docs/archive/learning-notes/README.md) | 个人学习笔记和历史沉淀 |
 
 ## License
 

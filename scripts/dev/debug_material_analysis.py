@@ -5,7 +5,8 @@ import sys
 from pathlib import Path
 
 # Bootstrap environment
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT))
 import tests  # noqa: F401
 
 from src.llm.client import LLMClient
@@ -17,7 +18,7 @@ from src.llm.translator import ResponseTranslator
 client = LLMClient()
 translator = ResponseTranslator()
 
-prompt_analyzer = (Path(__file__).parent.parent / "prompts" / "01_analyzer.md").read_text(
+prompt_analyzer = (PROJECT_ROOT / "prompts" / "legacy" / "01_analyzer.md").read_text(
     encoding="utf-8"
 )
 
