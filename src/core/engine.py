@@ -34,8 +34,8 @@ class TutorEngine:
     _WELCOME_MSG = (
         "欢迎使用 Teacher-skill！我是你的数字助教。\n\n"
         "在开始学习之前，让我先了解一下你的情况。\n\n"
-        "你之前接触过机器学习/深度学习相关内容吗？"
-        "是完全从零开始，还是有一些了解？"
+        "你目前的学习背景如何？是完全从零开始，"
+        "还是已经有一些相关领域的了解？"
     )
 
     def __init__(self, user_id: str, topic_id: str):
@@ -168,6 +168,7 @@ class TutorEngine:
 
         user_msg = f"用户的背景描述如下：\n\n{answer}\n\n请根据以上描述，判断用户的学习水平并输出 JSON。"
         from src.utils.config import get_config
+        fallback_notice = ""
         try:
             response = self._call_llm(
                 self._get_system_prompt("onboarding"),
@@ -183,17 +184,24 @@ class TutorEngine:
                     "explanation": parsed.get("explanation", ""),
                 }
 
-            # Fallback: infer from keywords
-            text = response.lower()
+            # LLM 返回了对话文本（非 JSON），说明用户在闲聊或回答无关
+            # 将对话文本返回给上层，让上层继续对话引导
+            return {
+                "level": "",
+                "familiar_topics": [],
+                "explanation": response.strip(),
+                "is_conversation": True,
+            }
         except LLMError as exc:
             self.logger.warning(f"Onboarding LLM call failed: {exc}, using keyword fallback")
             text = answer.lower()
+            fallback_notice = "（离线推断：未能连接到 AI 分析服务）"
 
         if any(k in text for k in ["advanced", "高级", "很熟悉", "深入"]):
-            return {"level": "advanced", "familiar_topics": [], "explanation": "根据描述推断为高级水平"}
+            return {"level": "advanced", "familiar_topics": [], "explanation": f"根据描述推断为高级水平{fallback_notice}"}
         if any(k in text for k in ["intermediate", "中级", "有一些了解", "接触过"]):
-            return {"level": "intermediate", "familiar_topics": [], "explanation": "根据描述推断为中级水平"}
-        return {"level": "beginner", "familiar_topics": [], "explanation": "根据描述推断为初级水平"}
+            return {"level": "intermediate", "familiar_topics": [], "explanation": f"根据描述推断为中级水平{fallback_notice}"}
+        return {"level": "beginner", "familiar_topics": [], "explanation": f"根据描述推断为初级水平{fallback_notice}"}
 
     # ─── Material Analysis ───
 

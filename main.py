@@ -160,10 +160,17 @@ class TeacherSkillApp:
 
     def _check_llm(self) -> bool:
         """Verify that an API key is configured."""
-        api_key = os.getenv("ANTHROPIC_API_KEY")
+        api_key = (
+            os.getenv("TEACHER_SKILL_API_KEY")
+            or os.getenv("ANTHROPIC_API_KEY")
+            or os.getenv("MOONSHOT_API_KEY")
+            or os.getenv("DEEPSEEK_API_KEY")
+            or ""
+        )
         if api_key and api_key != "your_api_key_here":
             return True
-        console.print("[yellow]⚠️ 警告: 未配置 ANTHROPIC_API_KEY，LLM 调用将不可用[/yellow]\n")
+        console.print("[yellow]⚠️ 警告: 未配置 API Key，LLM 调用将不可用[/yellow]\n")
+        console.print("[dim]运行 python main.py --setup 进行配置[/dim]\n")
         return False
 
     def start(self) -> bool:
@@ -225,7 +232,7 @@ class TeacherSkillApp:
         except Exception as exc:
             self.logger.error(f"Application error: {exc}")
             self._save_progress()
-            console.print(f"\n[red]⚠️ 系统遇到了问题: {exc}[/red]")
+            console.print(f"\n[red]⚠️ 系统遇到了问题: {escape(exc)}[/red]")
             console.print("[dim]你的学习进度已自动保存，可以重新启动继续。[/dim]")
 
     # ─── Onboarding ───
@@ -244,20 +251,63 @@ class TeacherSkillApp:
         engine = TutorEngine(self.user_id, "onboarding")
         self._display_response(engine.start_onboarding())
 
-        user_input = console.input("\n[bold blue>[/bold blue] ").strip() or "完全从零开始"
-        result = engine.process_onboarding_answer(user_input)
-        level = result.get("level", "beginner")
+        level = "beginner"
+        explanation = ""
+        familiar_topics: list[str] = []
+
+        while True:
+            user_input = console.input("\n[bold blue]>[/bold blue] ").strip() or "完全从零开始"
+
+            # 如果回答太短，追问一次，让用户多说一点
+            if len(user_input.strip()) < 6:
+                console.print(
+                    "[yellow]你的回答比较简单，能再多说一点吗？"
+                    "比如你想学习什么领域，之前有没有接触过？[/yellow]"
+                )
+                continue
+
+            result = engine.process_onboarding_answer(user_input)
+
+            # LLM 返回的是对话文本（用户在闲聊/无关），显示后继续对话
+            if result.get("is_conversation"):
+                console.print(f"[cyan]{escape(result['explanation'])}[/cyan]")
+                continue
+
+            # 正常判定或离线推断
+            level = result.get("level", "beginner")
+            explanation = result.get("explanation", "")
+            familiar_topics = result.get("familiar_topics", [])
+            break
+
+        # 如果走的是 LLM 失败后的离线推断，让用户手动确认或选择
+        if "离线推断" in explanation:
+            console.print(
+                "\n[yellow]⚠️ AI 分析服务暂时不可用，进入离线模式。[/yellow]"
+            )
+            console.print(
+                "[dim]请根据你的实际情况选择学习水平：[/dim]\n"
+                "  1. 完全从零开始（beginner）\n"
+                "  2. 有一些了解（intermediate）\n"
+                "  3. 很熟悉，能深入讨论（advanced）\n"
+            )
+            choice = (
+                console.input("[bold blue]请选择（1/2/3，回车默认 1）：[/bold blue] ")
+                .strip() or "1"
+            )
+            level_map = {"1": "beginner", "2": "intermediate", "3": "advanced"}
+            level = level_map.get(choice, "beginner")
+            explanation = "你手动选择了学习水平"
 
         profile = UserProfile(
             user_id=self.user_id,
             level=level,
-            familiar_topics=result.get("familiar_topics", []),
+            familiar_topics=familiar_topics,
         )
         self.storage.save_user_profile(profile.model_dump())
 
         console.print(f"\n[green]✅ 已根据你的回答设定学习水平：[yellow]{level}[/yellow][/green]")
-        if result.get("explanation"):
-            console.print(f"[dim]{result['explanation']}[/dim]")
+        if explanation:
+            console.print(f"[dim]{explanation}[/dim]")
         console.print()
         return level
 
@@ -310,7 +360,7 @@ class TeacherSkillApp:
         topic_ids = {topic_id for topic_id, _ in topic_rows}
 
         while True:
-            choice = console.input("\n[bold blue>[/bold blue] ").strip()
+            choice = console.input("\n[bold blue]>[/bold blue] ").strip()
             if choice.lower() == "new":
                 return None
             if choice.lower() == "history":
@@ -590,7 +640,7 @@ class TeacherSkillApp:
         )
 
         while True:
-            user_input = console.input("[bold blue材料>[/bold blue] ").strip()
+            user_input = console.input("[bold blue]材料>[/bold blue] ").strip()
             if not user_input:
                 continue
 
@@ -694,7 +744,7 @@ class TeacherSkillApp:
         self._display_response(response)
 
         while True:
-            user_input = console.input("\n[bold blue>[/bold blue] ").strip()
+            user_input = console.input("\n[bold blue]>[/bold blue] ").strip()
 
             if not user_input:
                 continue
@@ -845,7 +895,7 @@ class TeacherSkillApp:
                     border_style="blue",
                 )
             )
-            choice = console.input("[bold blue确认>[/bold blue] ").strip()
+            choice = console.input("[bold blue]确认>[/bold blue] ").strip()
             if not choice:
                 return current_answer
 
@@ -855,7 +905,7 @@ class TeacherSkillApp:
                 return None
 
             if lowered == "/edit":
-                edited = console.input("[bold blue修改回答>[/bold blue] ").strip()
+                edited = console.input("[bold blue]修改回答>[/bold blue] ").strip()
                 if not edited:
                     console.print("[yellow]修改内容为空，保留原回答。[/yellow]")
                     continue

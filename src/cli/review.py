@@ -64,7 +64,7 @@ def run_review_loop(app: Any, topic_state: Any, *, output_console, sys_module) -
     review_stats = app._new_review_stats()
 
     while True:
-        user_input = output_console.input("\n[bold blue复习>[/bold blue] ").strip()
+        user_input = output_console.input("\n[bold blue]复习>[/bold blue] ").strip()
         if not user_input:
             continue
 
