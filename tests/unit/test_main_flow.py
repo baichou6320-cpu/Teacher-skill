@@ -345,7 +345,7 @@ class TestEnvironmentCheck:
         samples_dir = tmp_path / "samples"
         samples_dir.mkdir()
         (samples_dir / "demo_article.md").write_text("demo", encoding="utf-8")
-        answers = iter(["3", "", "", "sk-deepseek"])
+        answers = iter(["4", "", "", "sk-deepseek"])
 
         actions, ok = main.cli_environment.run_setup_wizard(
             project_root=tmp_path,

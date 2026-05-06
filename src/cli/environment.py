@@ -21,6 +21,15 @@ MODEL_PRESETS: tuple[dict[str, str], ...] = (
     },
     {
         "choice": "2",
+        "provider": "openai",
+        "label": "OpenAI (GPT-4o)",
+        "api_format": "openai",
+        "model_id": "gpt-4o",
+        "base_url": "https://api.openai.com/v1",
+        "key_url": "https://platform.openai.com/",
+    },
+    {
+        "choice": "3",
         "provider": "kimi",
         "label": "Kimi / Moonshot",
         "api_format": "openai",
@@ -29,7 +38,7 @@ MODEL_PRESETS: tuple[dict[str, str], ...] = (
         "key_url": "https://platform.moonshot.cn/",
     },
     {
-        "choice": "3",
+        "choice": "4",
         "provider": "deepseek",
         "label": "DeepSeek",
         "api_format": "openai",
@@ -38,7 +47,88 @@ MODEL_PRESETS: tuple[dict[str, str], ...] = (
         "key_url": "https://platform.deepseek.com/",
     },
     {
-        "choice": "4",
+        "choice": "5",
+        "provider": "qwen",
+        "label": "阿里通义千问 (Qwen)",
+        "api_format": "openai",
+        "model_id": "qwen-max",
+        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "key_url": "https://dashscope.aliyun.com/",
+    },
+    {
+        "choice": "6",
+        "provider": "zhipu",
+        "label": "智谱 GLM",
+        "api_format": "openai",
+        "model_id": "glm-4",
+        "base_url": "https://open.bigmodel.cn/api/paas/v4",
+        "key_url": "https://open.bigmodel.cn/",
+    },
+    {
+        "choice": "7",
+        "provider": "ernie",
+        "label": "百度文心一言",
+        "api_format": "openai",
+        "model_id": "ernie-4.0",
+        "base_url": "https://qianfan.baidubce.com/v2",
+        "key_url": "https://qianfan.baidu.com/",
+    },
+    {
+        "choice": "8",
+        "provider": "doubao",
+        "label": "字节豆包",
+        "api_format": "openai",
+        "model_id": "doubao-pro-32k",
+        "base_url": "https://ark.cn-beijing.volces.com/api/v3",
+        "key_url": "https://www.volcengine.com/product/doubao",
+    },
+    {
+        "choice": "9",
+        "provider": "hunyuan",
+        "label": "腾讯混元",
+        "api_format": "openai",
+        "model_id": "hunyuan-pro",
+        "base_url": "https://hunyuan.tencentcloudapi.com/v1",
+        "key_url": "https://cloud.tencent.com/product/hunyuan",
+    },
+    {
+        "choice": "10",
+        "provider": "gemini",
+        "label": "Google Gemini",
+        "api_format": "openai",
+        "model_id": "gemini-1.5-pro",
+        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+        "key_url": "https://aistudio.google.com/",
+    },
+    {
+        "choice": "11",
+        "provider": "openrouter",
+        "label": "OpenRouter",
+        "api_format": "openai",
+        "model_id": "anthropic/claude-3.5-sonnet",
+        "base_url": "https://openrouter.ai/api/v1",
+        "key_url": "https://openrouter.ai/",
+    },
+    {
+        "choice": "12",
+        "provider": "siliconflow",
+        "label": "SiliconFlow",
+        "api_format": "openai",
+        "model_id": "deepseek-ai/DeepSeek-V3",
+        "base_url": "https://api.siliconflow.cn/v1",
+        "key_url": "https://cloud.siliconflow.cn/",
+    },
+    {
+        "choice": "13",
+        "provider": "azure_openai",
+        "label": "Azure OpenAI",
+        "api_format": "openai",
+        "model_id": "",
+        "base_url": "",
+        "key_url": "https://azure.microsoft.com/products/ai-services/openai-service",
+    },
+    {
+        "choice": "14",
         "provider": "custom_openai",
         "label": "自定义 OpenAI 兼容接口",
         "api_format": "openai",
@@ -47,7 +137,7 @@ MODEL_PRESETS: tuple[dict[str, str], ...] = (
         "key_url": "",
     },
     {
-        "choice": "5",
+        "choice": "15",
         "provider": "custom_anthropic",
         "label": "自定义 Anthropic 兼容接口",
         "api_format": "anthropic",
@@ -569,10 +659,13 @@ def render_setup_wizard(
     panel_cls,
 ) -> bool:
     """Render the compact first-time setup wizard."""
+    import builtins
 
+    # Use builtins.input instead of Rich Console.input to avoid paste
+    # issues in some terminals (e.g. VS Code integrated terminal on Windows).
     actions, is_ok = run_setup_wizard(
         project_root,
-        input_func=output_console.input,
+        input_func=builtins.input,
     )
     table = table_cls(title="首次配置向导")
     table.add_column("项目", style="cyan")
