@@ -22,4 +22,3 @@ teaching:
 
 Use `prompt_mode: "merged"` only when you intentionally want to exercise the
 legacy prompt path.
-

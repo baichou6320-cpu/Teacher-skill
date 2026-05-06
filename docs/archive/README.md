@@ -8,4 +8,3 @@ These files are preserved for context, but new users can safely start from:
 - [`../README.md`](../README.md)
 - [`../install/README.md`](../install/README.md)
 - [`../product/project-overview.md`](../product/project-overview.md)
-

@@ -20,4 +20,3 @@ For the fixed offline demo, use the root-level script:
 ```bash
 python demo_full_loop.py
 ```
-

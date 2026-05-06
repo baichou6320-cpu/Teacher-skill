@@ -16,4 +16,3 @@ Recommended reading order for new users:
 2. [`install/README.md`](install/README.md)
 3. [`demo/three-minute-demo.md`](demo/three-minute-demo.md)
 4. [`product/project-overview.md`](product/project-overview.md)
-
