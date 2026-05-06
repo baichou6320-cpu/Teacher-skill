@@ -1,98 +1,179 @@
 # Teacher-skill
 
-[![Tests](https://github.com/baichou6320-cpu/Teacher-skill/actions/workflows/tests.yml/badge.svg)](https://github.com/baichou6320-cpu/Teacher-skill/actions/workflows/tests.yml)
+<div align="center">
+  <img src="skills/heuristic-teacher/assets/heuristic-teacher.svg" alt="Teacher-skill visual identity" width="720">
 
-Teacher-skill 是一个启发式数字助教 CLI。它把学习材料拆成知识卡片，通过「讲解 -> 提问 -> 判卷 -> 渐进提示」的闭环，帮助用户避免“看懂了但说不出来”的理解幻觉。
+  <p><strong>一个启发式数字助教 CLI，把阅读材料变成主动回忆、提问验证和复习巩固。</strong></p>
+  <p>学习材料 -> 提问验证 -> 判卷反馈 -> 复习巩固</p>
+
+  <p>
+    <a href="https://github.com/baichou6320-cpu/Teacher-skill/actions/workflows/tests.yml">
+      <img alt="Tests" src="https://github.com/baichou6320-cpu/Teacher-skill/actions/workflows/tests.yml/badge.svg">
+    </a>
+    <img alt="Python 3.11+" src="https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white">
+    <img alt="License MIT" src="https://img.shields.io/badge/License-MIT-green">
+    <img alt="Interface CLI" src="https://img.shields.io/badge/Interface-CLI-0F766E">
+  </p>
+</div>
+
+Teacher-skill 不是一个更快的总结器。它的目标是解决学习里的“理解幻觉”：看完解释时感觉懂了，但一合上材料就无法复述、无法判断边界，也不能把概念用到真实问题里。
+
+它会把材料拆成知识卡片，并强制进入一个小闭环：
 
 ```text
-学习材料 -> 知识卡片 -> 逐个讲解 -> 提问验证 -> 判卷反馈 -> 复习巩固
+学习材料 -> 知识卡片 -> 讲解 -> 提问 -> 用户作答 -> 判卷反馈 -> 复习巩固
 ```
 
-## 项目状态
+## 你可以用它做什么
 
-| 项目 | 状态 |
-|------|------|
+| 场景 | Teacher-skill 怎么帮你 |
+|---|---|
+| 学技术文章、课程笔记、论文摘要 | 拆成 3-7 个知识点，逐个讲解和提问 |
+| 检查自己是不是真的懂 | 通过主动回答验证理解，而不是只读解释 |
+| 答错后继续推进 | 先给线索、类比、半解析，再逐步增加提示 |
+| 时间紧时查答案 | `/direct` 直接看答案，并自动标记为待巩固 |
+| 回顾旧主题 | 用“复习一下 xxx”匹配历史主题，优先检查薄弱点 |
+| 构建 Agent Skill | 项目内置标准 Skill 结构，可作为学习样例 |
+
+## 当前状态
+
+| 模块 | 状态 |
+|---|---|
 | 核心教学闭环 | 可用 |
-| 项目初始化 | 支持 `python main.py --init` 创建本地配置和运行目录 |
-| 启动检查 | 支持 `python main.py --check` 定位配置问题 |
-| Demo 体验 | 支持 `python main.py --demo` 使用内置材料 |
-| 文件输入 | 支持 `.md` / `.txt` / `.pdf` |
-| 进度保存 | 支持历史 topic 恢复 |
-| 历史归档 | 完成主题后自动写入 profile，可用 `/history` 查看 |
-| 单元测试 | GitHub Actions 已接入 |
-| 当前定位 | 本地 CLI 学习工具，适合开发者和愿意使用命令行的学习者 |
-
-## 适合谁
-
-- 正在自学 AI、技术文档、课程资料的人
-- 读完资料后容易“感觉懂了，但无法复述”的人
-- 想把长文档拆成小知识点逐个验证的人
-- 想学习如何设计 Agent Skill / CLI 教学产品的人
+| CLI 初始化 | `python main.py --init` |
+| 环境检查 | `python main.py --check` |
+| Demo 体验 | `python main.py --demo` |
+| 文件输入 | `.md` / `.txt` / `.pdf` |
+| 学习控制命令 | `/progress`、`/list`、`/skip`、`/back`、`/jump`、`/direct` |
+| 历史归档 | 主题完成后写入 `profile.history_topics` |
+| 复习模式 | 基础版可用，支持自然语言匹配历史主题 |
+| 测试 | 单元测试接入 GitHub Actions |
+| 产品定位 | 本地 CLI 学习工具，适合开发者和愿意使用命令行的学习者 |
 
 ## 快速开始
 
-需要 Python 3.11+。
+需要 Python 3.11+、Git，以及一个 Anthropic 兼容 API Key。
 
 ```bash
 git clone https://github.com/baichou6320-cpu/Teacher-skill.git
 cd Teacher-skill
 
 python main.py --init
-# 编辑 .env，填入 ANTHROPIC_API_KEY
-
 python -m pip install -r requirements.txt
 python main.py --check
 python main.py --demo
 ```
 
-`--init` 会创建 `.env`、`data/` 和 `logs/`，并且不会覆盖已有 `.env`。
+第一次运行后，打开 `.env`，填写：
 
-`--check` 会检查 API Key、`config.yaml`、运行依赖和内置示例材料。它适合在第一次运行或报错时快速定位问题。
+```text
+ANTHROPIC_API_KEY=your_api_key_here
+```
 
-`--demo` 会使用内置短文《番茄工作法入门》，适合第一次体验。正式学习时推荐使用 `--file` 从文件直接开始：
+模型和生成参数不要写在 `.env`，统一在 `config.yaml` 中配置：
+
+```yaml
+llm:
+  model_id: "claude-sonnet-4-20250514"
+  temperature: 0.7
+  max_tokens: 2048
+```
+
+如果你使用 Kimi/Moonshot 等 Anthropic 兼容接口，可以同时配置：
+
+```text
+# .env
+ANTHROPIC_BASE_URL=https://api.moonshot.cn/anthropic
+```
+
+```yaml
+# config.yaml
+llm:
+  model_id: "kimi-k2.5"
+```
+
+## 三种启动方式
+
+### 1. 先跑 Demo
+
+适合第一次体验，不需要准备材料，但仍需要 API Key。
+
+```bash
+python main.py --demo
+```
+
+Demo 会使用内置短文 `samples/demo_article.md`，带你走完整个学习闭环。
+
+### 2. 从文件开始学习
+
+推荐正式使用时走这个入口。
 
 ```bash
 python main.py --file article.md
 ```
 
-也可以进入交互模式后使用 `/load` 加载材料：
+支持：
+
+```text
+.md
+.txt
+.pdf
+```
+
+### 3. 进入交互模式
+
+适合已有历史主题、想恢复进度、想复习旧内容，或想手动粘贴材料。
 
 ```bash
 python main.py
 ```
 
-模型和生成参数在 `config.yaml` 中配置；`.env` 只用于 API Key 和可选的 `ANTHROPIC_BASE_URL`。更详细的安装步骤见 [安装和配置](docs/install/README.md)。
+在交互模式中可以输入：
 
-## 使用体验
+```text
+/load path/to/article.md
+```
 
-学习开始后，系统会自动完成这些事：
+长材料推荐先保存成文件，再用 `--file` 或 `/load` 加载。
 
-1. 读取你的学习材料
-2. 拆分成多个知识卡片
-3. 逐个讲解知识点
-4. 提问验证你是否真的理解
-5. 根据回答给出判卷反馈或渐进提示
-6. 保存进度，方便下次继续
-7. 学完后归档到历史学习记录，为后续复习做准备
+## 学习流程
 
-普通回答不会立刻判卷，会先进入提交确认：
+```text
+Step 1 读取材料
+Step 2 分析并拆成知识卡片
+Step 3 讲解当前知识点
+Step 4 提问验证
+Step 5 用户作答
+Step 6 判卷并反馈
+Step 7 保存进度
+Step 8 完成后归档，等待后续复习
+```
+
+答错时不会立刻公布完整答案，而是使用渐进提示：
+
+| 层级 | 提示方式 | 目标 |
+|---|---|---|
+| 1 | 线索提示 | 给方向，不替你回答 |
+| 2 | 生活类比 | 换一个熟悉场景理解 |
+| 3 | 半解析 | 给部分推理链 |
+| 4 | 关键词或部分答案 | 帮你越过卡点，并标记待巩固 |
+
+普通回答会先进入提交确认：
 
 | 输入 | 行为 |
-|------|------|
+|---|---|
 | Enter | 提交当前回答 |
 | `/edit` | 修改回答 |
 | `/cancel` | 取消本次提交 |
 
-答错时系统会显示温和提示面板，并标明当前提示层级，例如「第 2/4 层：生活类比」。
-
-## 常用命令
+## 命令速查
 
 | 命令 | 作用 |
-|------|------|
+|---|---|
 | `/help` | 查看帮助 |
 | `/progress` | 查看当前进度、掌握数、待巩固数和答题统计 |
 | `/list` | 查看全部知识点 |
-| `/review` | 查看待巩固知识点 |
+| `/review` | 查看当前主题中需要巩固的知识点 |
 | `/history` | 查看已归档的历史学习主题 |
 | `/skip` | 跳过当前知识点，并标记为待巩固 |
 | `/back` | 回到上一个知识点 |
@@ -101,17 +182,42 @@ python main.py
 | `/load <路径>` | 加载文件；学习中使用会追加为新的知识点 |
 | `/exit` | 保存进度并退出 |
 
-在主题选择时，也可以直接输入自然语言复习请求，例如“复习一下 Transformer”。系统会匹配历史主题，并进入复习模式：跳过讲解，优先提问待巩固、答错过或用过提示的知识点；复习结束后会输出本轮统计和仍待巩固列表。
+## 复习模式
+
+完成主题后，Teacher-skill 会把学习记录写入用户档案。下次进入交互模式时，可以直接说：
+
+```text
+复习一下 Transformer
+```
+
+系统会从历史主题中匹配最相关的记录，并进入复习模式：
+
+```text
+历史主题 -> 薄弱点排序 -> 直接提问 -> 短反馈 -> 更新复习记录
+```
+
+复习模式会优先检查：
+
+- `needs_review` 的知识点
+- 答错过的知识点
+- 使用过提示的知识点
+- 尚未完成的知识点
+
+复习结束后会输出本轮统计，并更新 `last_reviewed_at`、掌握数和待巩固数。
 
 ## 项目结构
 
 ```text
 Teacher-skill/
-├── main.py                         # CLI 入口
+├── main.py                         # CLI 入口和应用编排
 ├── config.yaml                     # 模型与生成参数
 ├── requirements.txt                # Python 依赖
-├── models/                         # 协议和状态模型
-├── src/                            # 核心引擎、LLM、工具模块
+├── models/                         # 协议、状态、用户档案模型
+├── src/
+│   ├── cli/                        # 启动检查、展示、复习 CLI 流程
+│   ├── core/                       # 教学状态机、记忆、奖励、路由
+│   ├── llm/                        # LLM 客户端、异常、响应解析
+│   └── utils/                      # 配置、文件加载、日志、存储
 ├── prompts/                        # 分层 Prompt
 ├── samples/                        # 内置 demo 学习材料
 ├── skills/heuristic-teacher/       # 标准 Agent Skill
@@ -119,16 +225,113 @@ Teacher-skill/
 └── docs/                           # 产品、开发、安装和学习笔记
 ```
 
+## 架构概览
+
+| 模块 | 文件 | 职责 |
+|---|---|---|
+| CLI 应用 | `main.py` | 参数解析、用户流程编排、进度保存 |
+| 启动检查 | `src/cli/environment.py` | 初始化、依赖检查、配置检查 |
+| 控制台展示 | `src/cli/display.py` | Rich 表格、反馈面板、学习总结 |
+| 复习 CLI | `src/cli/review.py` | 复习循环、复习统计、历史更新 |
+| 教学引擎 | `src/core/engine.py` | 状态机、讲解、判卷、跳转、复习队列 |
+| 意图路由 | `src/core/router.py` | 识别“复习一下 xxx”并匹配历史主题 |
+| LLM 客户端 | `src/llm/client.py` | Anthropic 兼容调用、重试、错误分类 |
+| 响应解析 | `src/llm/translator.py` | JSON 提取、判卷解析、文本兜底 |
+| 文件加载 | `src/utils/file_loader.py` | `.md` / `.txt` / `.pdf` 内容读取 |
+| 存储 | `src/utils/storage.py` | `state.json`、`history.json`、`profile.json` |
+
 ## Agent Skill
 
-标准 Skill 定义在 [skills/heuristic-teacher/SKILL.md](skills/heuristic-teacher/SKILL.md)。
+标准 Skill 定义在：
 
-这个文件只保留 Agent 执行启发式教学时必须遵守的工作流。项目说明、PRD、路线图和学习笔记都放在 `docs/` 中，避免污染 Skill 核心。
+```text
+skills/heuristic-teacher/SKILL.md
+```
+
+它描述了 Agent 如何执行启发式教学：拆知识点、一次只教一个点、提问验证、语义判卷、渐进提示、复习薄弱点。
+
+支持文件：
+
+| 文件 | 用途 |
+|---|---|
+| `skills/heuristic-teacher/SKILL.md` | Skill 主工作流 |
+| `skills/heuristic-teacher/references/teaching-loop.md` | 教学闭环细节 |
+| `skills/heuristic-teacher/references/verification.md` | 发布和验证参考 |
+| `skills/heuristic-teacher/assets/` | Skill 视觉资产 |
+
+## 验证
+
+单元测试不需要 API Key：
+
+```bash
+pytest tests/unit/
+```
+
+集成测试需要真实 LLM API Key：
+
+```bash
+python tests/integration/test_e2e.py
+python tests/integration/test_tutoring_loop.py
+```
+
+发布前建议至少跑：
+
+```bash
+python main.py --check
+pytest tests/unit/
+```
+
+## 常见问题
+
+### `python main.py --check` 提示缺依赖
+
+重新安装依赖：
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+如果你使用虚拟环境，确认当前终端已经激活它。
+
+### PowerShell 无法激活虚拟环境
+
+在当前 PowerShell 会话中临时放开执行策略：
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\.venv\Scripts\Activate.ps1
+```
+
+### 没有 API Key 能不能跑
+
+可以运行初始化、环境检查和单元测试：
+
+```bash
+python main.py --init
+python main.py --check
+pytest tests/unit/
+```
+
+但 `--demo`、`--file` 和真实学习流程需要可用的 LLM API Key。
+
+### 为什么 `/direct` 后还要标记待巩固
+
+因为直接看答案绕过了主动回忆。Teacher-skill 的核心判断是：只有用户能自己回答，才算真正掌握。
+
+## 路线图
+
+| 版本 | 目标 | 状态 |
+|---|---|---|
+| v0.2.0 | GitHub 首发：README、安装文档、Skill 结构、CI | 可发布 |
+| v0.3.0 | CLI 可用性：输入体验、控制命令、反馈优化 | 进行中 |
+| v0.4.0 | 复习模式：历史归档、自然语言匹配、复习报告 | 基础版完成 |
+| v0.5.0 | 教学风格 Persona：严师、良师、苏格拉底、Peer | 待开始 |
+| v1.0.0 | 普通用户产品版：Web UI、拖拽上传、可视化进度 | 待开始 |
 
 ## 文档入口
 
 | 文档 | 说明 |
-|------|------|
+|---|---|
 | [安装和配置](docs/install/README.md) | 从零运行项目 |
 | [项目总览](docs/product/project-overview.md) | 产品定位、机制和模块说明 |
 | [PRD](docs/product/PRD.md) | 产品需求文档 |
@@ -137,21 +340,6 @@ Teacher-skill/
 | [发布检查清单](docs/development/release-checklist.md) | 发布前检查项 |
 | [变更日志](docs/development/changelog.md) | 重要改动记录 |
 | [学习笔记](docs/learning-notes/README.md) | 项目学习沉淀 |
-
-## 验证
-
-单元测试无需 API Key：
-
-```bash
-pytest tests/unit/
-```
-
-集成测试需要配置真实 LLM API Key：
-
-```bash
-python tests/integration/test_e2e.py
-python tests/integration/test_tutoring_loop.py
-```
 
 ## License
 

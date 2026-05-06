@@ -1,17 +1,73 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" role="img" aria-labelledby="title desc">
-  <title id="title">Heuristic Teacher logo</title>
-  <desc id="desc">A visual identity for a tutoring skill that teaches, questions, judges, and reviews.</desc>
-  <rect width="960" height="540" rx="72" fill="#F8FAFC"/>
-  <rect x="72" y="72" width="816" height="396" rx="48" fill="#0F766E"/>
-  <path d="M196 168h184c54 0 98 44 98 98v164c0 15-13 28-28 28H196c-44 0-80-36-80-80V248c0-44 36-80 80-80Z" fill="#ECFEFF"/>
-  <path d="M764 168H580c-54 0-98 44-98 98v164c0 15 13 28 28 28h254c44 0 80-36 80-80V248c0-44-36-80-80-80Z" fill="#CCFBF1"/>
-  <path d="M480 214v226" stroke="#0F766E" stroke-width="24" stroke-linecap="round"/>
-  <path d="M196 232h134M196 294h134M196 356h98" stroke="#115E59" stroke-width="20" stroke-linecap="round"/>
-  <path d="M630 232h134M630 294h134M666 356h98" stroke="#115E59" stroke-width="20" stroke-linecap="round"/>
-  <circle cx="480" cy="150" r="64" fill="#F59E0B"/>
-  <text x="480" y="176" text-anchor="middle" font-family="Arial, sans-serif" font-size="112" font-weight="700" fill="#FFFFFF">?</text>
-  <path d="M596 380c68-18 118-80 118-154" fill="none" stroke="#F59E0B" stroke-width="24" stroke-linecap="round"/>
-  <path d="M714 226l-32 24 40 12" fill="none" stroke="#F59E0B" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M364 250c-68 18-118 80-118 154" fill="none" stroke="#F59E0B" stroke-width="24" stroke-linecap="round"/>
-  <path d="M246 404l32-24-40-12" fill="none" stroke="#F59E0B" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+  <title id="title">Teacher-skill active learning loop</title>
+  <desc id="desc">A concrete product illustration showing learning material turned into explain, question, feedback, and review steps.</desc>
+
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#0F172A" flood-opacity="0.14"/>
+    </filter>
+    <linearGradient id="panel" x1="90" y1="70" x2="870" y2="480" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0F766E"/>
+      <stop offset="1" stop-color="#115E59"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="454" y1="126" x2="536" y2="208" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FBBF24"/>
+      <stop offset="1" stop-color="#F59E0B"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="960" height="540" rx="56" fill="#F8FAFC"/>
+  <rect x="54" y="44" width="852" height="452" rx="44" fill="url(#panel)" filter="url(#shadow)"/>
+
+  <text x="480" y="106" text-anchor="middle" font-family="Arial, 'Microsoft YaHei', sans-serif" font-size="48" font-weight="800" fill="#FFFFFF">Teacher-skill</text>
+  <text x="480" y="142" text-anchor="middle" font-family="Arial, 'Microsoft YaHei', sans-serif" font-size="22" font-weight="600" fill="#CCFBF1">把阅读材料变成主动回答、判卷反馈和复习巩固</text>
+
+  <rect x="102" y="178" width="220" height="188" rx="26" fill="#ECFEFF"/>
+  <text x="132" y="220" font-family="Arial, 'Microsoft YaHei', sans-serif" font-size="24" font-weight="800" fill="#115E59">学习材料</text>
+  <rect x="132" y="242" width="138" height="13" rx="6.5" fill="#0F766E"/>
+  <rect x="132" y="270" width="164" height="13" rx="6.5" fill="#14B8A6" opacity="0.72"/>
+  <rect x="132" y="298" width="118" height="13" rx="6.5" fill="#0F766E" opacity="0.85"/>
+  <rect x="132" y="326" width="74" height="22" rx="11" fill="#F59E0B"/>
+  <text x="169" y="342" text-anchor="middle" font-family="Arial, 'Microsoft YaHei', sans-serif" font-size="13" font-weight="700" fill="#FFFFFF">.md .pdf</text>
+
+  <path d="M340 268H402" stroke="#F59E0B" stroke-width="13" stroke-linecap="round"/>
+  <path d="M402 268l-25-19v38z" fill="#F59E0B"/>
+
+  <rect x="388" y="174" width="246" height="198" rx="28" fill="#FFFFFF"/>
+  <rect x="410" y="198" width="202" height="48" rx="16" fill="#0F172A"/>
+  <text x="432" y="229" font-family="Consolas, 'Microsoft YaHei', monospace" font-size="18" font-weight="700" fill="#A7F3D0">&gt; 请回答</text>
+  <text x="414" y="282" font-family="Arial, 'Microsoft YaHei', sans-serif" font-size="22" font-weight="800" fill="#115E59">提问验证</text>
+  <text x="414" y="316" font-family="Arial, 'Microsoft YaHei', sans-serif" font-size="18" fill="#334155">不是只看解释，</text>
+  <text x="414" y="344" font-family="Arial, 'Microsoft YaHei', sans-serif" font-size="18" fill="#334155">而是让你说出来。</text>
+  <circle cx="608" cy="186" r="40" fill="url(#accent)"/>
+  <text x="608" y="212" text-anchor="middle" font-family="Arial, sans-serif" font-size="68" font-weight="800" fill="#FFFFFF">?</text>
+
+  <path d="M652 268H714" stroke="#F59E0B" stroke-width="13" stroke-linecap="round"/>
+  <path d="M714 268l-25-19v38z" fill="#F59E0B"/>
+
+  <rect x="702" y="178" width="156" height="188" rx="26" fill="#CCFBF1"/>
+  <text x="730" y="220" font-family="Arial, 'Microsoft YaHei', sans-serif" font-size="24" font-weight="800" fill="#115E59">反馈复习</text>
+  <rect x="730" y="248" width="94" height="16" rx="8" fill="#0F766E"/>
+  <rect x="730" y="278" width="70" height="16" rx="8" fill="#14B8A6"/>
+  <rect x="730" y="308" width="102" height="16" rx="8" fill="#F59E0B"/>
+  <text x="738" y="348" font-family="Arial, 'Microsoft YaHei', sans-serif" font-size="15" font-weight="700" fill="#115E59">掌握 / 待巩固</text>
+
+  <rect x="142" y="404" width="676" height="52" rx="26" fill="#FFFFFF" opacity="0.96"/>
+  <g font-family="Arial, 'Microsoft YaHei', sans-serif" font-size="18" font-weight="800">
+    <text x="190" y="437" text-anchor="middle" fill="#115E59">讲解</text>
+    <text x="312" y="437" text-anchor="middle" fill="#115E59">提问</text>
+    <text x="434" y="437" text-anchor="middle" fill="#115E59">作答</text>
+    <text x="556" y="437" text-anchor="middle" fill="#115E59">判卷</text>
+    <text x="678" y="437" text-anchor="middle" fill="#115E59">复习</text>
+  </g>
+  <g stroke="#F59E0B" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M232 430H270"/>
+    <path d="M270 430l-12-9v18z" fill="#F59E0B" stroke="none"/>
+    <path d="M354 430H392"/>
+    <path d="M392 430l-12-9v18z" fill="#F59E0B" stroke="none"/>
+    <path d="M476 430H514"/>
+    <path d="M514 430l-12-9v18z" fill="#F59E0B" stroke="none"/>
+    <path d="M598 430H636"/>
+    <path d="M636 430l-12-9v18z" fill="#F59E0B" stroke="none"/>
+  </g>
 </svg>
