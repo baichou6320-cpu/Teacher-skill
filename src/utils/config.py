@@ -11,6 +11,9 @@ from pydantic import BaseModel, Field
 class LLMConfig(BaseModel):
     """LLM client parameters."""
 
+    provider: str = "anthropic"
+    api_format: str = "anthropic"
+    base_url: Optional[str] = None
     model_id: str = "claude-sonnet-4-20250514"
     temperature: float = 0.7
     max_tokens: int = 2048

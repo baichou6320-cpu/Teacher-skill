@@ -123,6 +123,16 @@ def run_project_init() -> bool:
     )
 
 
+def run_setup_wizard() -> bool:
+    """Render the first-time model/provider setup wizard."""
+    return cli_environment.render_setup_wizard(
+        PROJECT_ROOT,
+        output_console=console,
+        table_cls=Table,
+        panel_cls=Panel,
+    )
+
+
 def run_environment_check() -> bool:
     """Render environment checks and return whether the app can start."""
     return cli_environment.render_environment_check(
@@ -1096,17 +1106,22 @@ def main() -> None:
         help="检查 API Key、配置文件、依赖和示例材料是否准备好",
     )
     parser.add_argument(
+        "--setup",
+        action="store_true",
+        help="首次配置向导：选择模型服务商、粘贴 API Key、自动写入 .env/config.yaml",
+    )
+    parser.add_argument(
         "--init",
         action="store_true",
-        help="初始化 .env、数据目录和日志目录，不覆盖已有配置",
+        help="已合并到 --setup，请使用 --setup 或直接运行 main.py",
     )
     args = parser.parse_args()
 
-    if args.init:
-        if not run_project_init():
+    # --init 是 --setup 的别名，保持向后兼容
+    if args.setup or args.init:
+        if not run_setup_wizard():
             sys.exit(1)
-        if not args.check:
-            return
+        return
 
     if args.check:
         if not run_environment_check():
@@ -1120,6 +1135,40 @@ def main() -> None:
         console.print("[yellow]请先运行：python -m pip install -r requirements.txt[/yellow]")
         console.print("[dim]也可以运行 python main.py --check 查看完整检查结果。[/dim]")
         sys.exit(1)
+
+    # ─── Auto-detect missing config and guide into setup ───
+    checks, is_ready = collect_environment_checks(project_root=PROJECT_ROOT)
+
+    if not is_ready:
+        failed_required = [
+            c for c in checks if not c["passed"] and c["required"]
+        ]
+        failed_names = [c["name"] for c in failed_required]
+        console.print(
+            f"\n[yellow]⚠️ 检测到以下配置项尚未就绪：{', '.join(failed_names)}[/yellow]"
+        )
+        console.print(
+            "[dim]你可以随时运行：python main.py --setup 进行完整配置[/dim]\n"
+        )
+
+        choice = console.input(
+            "[bold cyan]是否现在运行配置向导？（Y/n）：[/bold cyan] "
+        ).strip().lower()
+
+        if choice not in ("n", "no"):
+            if run_setup_wizard():
+                # Re-check after successful setup
+                checks, is_ready = collect_environment_checks(
+                    project_root=PROJECT_ROOT
+                )
+            else:
+                console.print("[red]配置未完成，无法启动。[/red]")
+                sys.exit(1)
+
+        if not is_ready:
+            console.print("[red]环境检查未通过，无法启动。[/red]")
+            console.print("[dim]运行 python main.py --setup 完成配置后再试。[/dim]")
+            sys.exit(1)
 
     app = TeacherSkillApp()
     app.run(file_path=args.file, demo=args.demo)

@@ -275,7 +275,7 @@ class TestEnvironmentCheck:
 
         checks, ready = main.collect_environment_checks(env={}, project_root=tmp_path)
 
-        api_check = next(check for check in checks if check["name"] == "ANTHROPIC_API_KEY")
+        api_check = next(check for check in checks if check["name"] == "API Key")
         assert ready is False
         assert api_check["passed"] is False
         assert "未配置" in api_check["detail"]
@@ -332,6 +332,35 @@ class TestEnvironmentCheck:
         assert "fallback-model" in config_check["detail"]
         assert "轻量解析" in config_check["detail"]
         assert runtime_check["passed"] is False
+
+    def test_setup_wizard_writes_provider_env_and_config(self, tmp_path):
+        (tmp_path / ".env.example").write_text(
+            "TEACHER_SKILL_API_KEY=your_api_key_here\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "config.yaml").write_text(
+            "paths:\n  data_dir: ./data\n  logs_dir: ./logs\n",
+            encoding="utf-8",
+        )
+        samples_dir = tmp_path / "samples"
+        samples_dir.mkdir()
+        (samples_dir / "demo_article.md").write_text("demo", encoding="utf-8")
+        answers = iter(["3", "", "", "sk-deepseek"])
+
+        actions, ok = main.cli_environment.run_setup_wizard(
+            project_root=tmp_path,
+            input_func=lambda prompt: next(answers),
+        )
+
+        env_text = (tmp_path / ".env").read_text(encoding="utf-8")
+        config_text = (tmp_path / "config.yaml").read_text(encoding="utf-8")
+        assert ok is True
+        assert "TEACHER_SKILL_API_KEY=sk-deepseek" in env_text
+        assert "TEACHER_SKILL_BASE_URL=https://api.deepseek.com" in env_text
+        assert 'provider: "deepseek"' in config_text
+        assert 'api_format: "openai"' in config_text
+        assert 'model_id: "deepseek-chat"' in config_text
+        assert any(action["item"] == "config.yaml" and action["status"] == "已配置" for action in actions)
 
 
 class TestResumeTopicFlow:

@@ -2,11 +2,15 @@
 # 所有可调参数集中于此，代码中不再硬编码
 
 llm:
-  # 模型标识（Anthropic 兼容接口）。
-  # 修改模型请改这里；.env 只负责 API Key 和可选 base_url。
-  # 示例：
-  # - Anthropic 官方: claude-sonnet-4-20250514
-  # - Kimi/Moonshot: kimi-k2.5（通常需要在 .env 设置 ANTHROPIC_BASE_URL）
+  # 首次使用推荐运行：python main.py --setup
+  # provider: anthropic / kimi / deepseek / custom_openai / custom_anthropic
+  provider: "anthropic"
+  # api_format: anthropic = Anthropic Messages API；openai = OpenAI 兼容 chat/completions
+  api_format: "anthropic"
+  # OpenAI 兼容服务商通常需要 base_url；Anthropic 官方可留空。
+  # Kimi/Moonshot: https://api.moonshot.cn/v1
+  # DeepSeek: https://api.deepseek.com
+  base_url: ""
   model_id: "claude-sonnet-4-20250514"
   # 生成参数
   temperature: 0.7

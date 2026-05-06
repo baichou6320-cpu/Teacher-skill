@@ -18,6 +18,9 @@ class TestLoadConfig:
 
     def test_default_values(self, tmp_path):
         cfg = load_config(config_path=tmp_path / "nonexistent.yaml")
+        assert cfg.llm.provider == "anthropic"
+        assert cfg.llm.api_format == "anthropic"
+        assert cfg.llm.base_url is None
         assert cfg.llm.model_id == "claude-sonnet-4-20250514"
         assert cfg.llm.temperature == 0.7
         assert cfg.llm.max_tokens == 2048
@@ -33,16 +36,21 @@ class TestLoadConfig:
     def test_yaml_override(self, tmp_path):
         p = tmp_path / "test_config.yaml"
         p.write_text(
-            "llm:\n  timeout: 60\n  retry_count: 5\n"
+            "llm:\n  provider: deepseek\n  api_format: openai\n"
+            "  base_url: https://api.deepseek.com\n"
+            "  model_id: deepseek-chat\n  timeout: 60\n  retry_count: 5\n"
             "teaching:\n  prompt_mode: merged\n",
             encoding="utf-8",
         )
         cfg = load_config(config_path=p)
+        assert cfg.llm.provider == "deepseek"
+        assert cfg.llm.api_format == "openai"
+        assert cfg.llm.base_url == "https://api.deepseek.com"
+        assert cfg.llm.model_id == "deepseek-chat"
         assert cfg.llm.timeout == 60
         assert cfg.llm.retry_count == 5
         assert cfg.teaching.prompt_mode == "merged"
         # unchanged values
-        assert cfg.llm.model_id == "claude-sonnet-4-20250514"
         assert cfg.teaching.hint_max_level == 4
 
     def test_force_reload(self, tmp_path):

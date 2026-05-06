@@ -1,7 +1,9 @@
-"""LLM 通信封装
+"""LLM 通信封装.
 
-支持 Anthropic 兼容接口（Claude、Kimi、MiniMax、GLM、DeepSeek 等）
+Supports both Anthropic Messages API and OpenAI-compatible chat-completions
+providers such as Kimi/Moonshot and DeepSeek.
 """
+import os
 from typing import Optional
 
 import httpx
@@ -30,26 +32,34 @@ class LLMClient:
         cfg = get_config().llm
         self.logger = get_logger("llm")
 
-        self.api_key = api_key
+        self.provider = cfg.provider
+        self.api_format = cfg.api_format
+        self.api_key = api_key or self._read_api_key()
         if not self.api_key:
-            import os
-            self.api_key = os.getenv("ANTHROPIC_API_KEY")
-        if not self.api_key:
-            raise ValueError("ANTHROPIC_API_KEY is required")
+            raise ValueError("API key is required")
 
         self.model_id = model_id or cfg.model_id
-        self.base_url = base_url
-        if not self.base_url:
-            import os
-            self.base_url = os.getenv("ANTHROPIC_BASE_URL")
+        self.base_url = (
+            base_url
+            or os.getenv("TEACHER_SKILL_BASE_URL")
+            or os.getenv("ANTHROPIC_BASE_URL")
+            or cfg.base_url
+        )
         self.max_retries = cfg.retry_count
 
-        # Initialise Anthropic client (with optional custom base_url)
-        kwargs: dict = {"api_key": self.api_key}
-        if self.base_url:
-            kwargs["base_url"] = self.base_url
-        self.client = Anthropic(**kwargs)
-        self.logger.debug("LLMClient initialized")
+        self.client: Anthropic | None = None
+        if self.api_format == "anthropic":
+            kwargs: dict = {"api_key": self.api_key}
+            if self.base_url:
+                kwargs["base_url"] = self.base_url
+            self.client = Anthropic(**kwargs)
+        elif self.api_format != "openai":
+            raise ValueError(f"Unsupported llm.api_format: {self.api_format}")
+
+        self.logger.debug(
+            f"LLMClient initialized: provider={self.provider}, "
+            f"api_format={self.api_format}, model={self.model_id}"
+        )
 
     def generate(
         self,
@@ -73,8 +83,9 @@ class LLMClient:
         last_error: Optional[Exception] = None
 
         self.logger.info(
-            f"LLM call start: model={model}, max_tokens={max_tokens}, "
-            f"sys_prompt_len={len(system_prompt)}, user_msg_len={len(user_message)}"
+            f"LLM call start: provider={self.provider}, api_format={self.api_format}, "
+            f"model={model}, max_tokens={max_tokens}, sys_prompt_len={len(system_prompt)}, "
+            f"user_msg_len={len(user_message)}"
         )
         start_time = time.time()
 
@@ -82,15 +93,24 @@ class LLMClient:
 
         for attempt in range(self.max_retries):
             try:
-                response = self.client.messages.create(
-                    model=model,
-                    system=system_prompt,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                    messages=[{"role": "user", "content": user_message}],
-                    timeout=timeout,
-                )
-                text = self._extract_text(response)
+                if self.api_format == "anthropic":
+                    text = self._generate_anthropic(
+                        model=model,
+                        system_prompt=system_prompt,
+                        user_message=user_message,
+                        max_tokens=max_tokens,
+                        temperature=temperature,
+                        timeout=timeout,
+                    )
+                else:
+                    text = self._generate_openai_compatible(
+                        model=model,
+                        system_prompt=system_prompt,
+                        user_message=user_message,
+                        max_tokens=max_tokens,
+                        temperature=temperature,
+                        timeout=timeout,
+                    )
                 elapsed = time.time() - start_time
                 self.logger.info(
                     f"LLM call success: attempt={attempt + 1}, elapsed={elapsed:.2f}s, "
@@ -100,7 +120,7 @@ class LLMClient:
             except (AuthenticationError, PermissionDeniedError) as exc:
                 self.logger.error(f"LLM auth error: {exc}")
                 raise LLMAuthError(
-                    "API Key 无效或服务不可用，请检查 .env 中的 ANTHROPIC_API_KEY 配置"
+                    "API Key 无效或服务不可用，请检查 .env 中的 TEACHER_SKILL_API_KEY 配置"
                 ) from exc
             except RateLimitError as exc:
                 self.logger.warning(f"LLM rate limit: {exc}")
@@ -124,6 +144,26 @@ class LLMClient:
                     raise LLMConnectionError(
                         "网络连接失败，请检查网络连接后重试"
                     ) from exc
+            except httpx.HTTPStatusError as exc:
+                status_code = exc.response.status_code
+                self.logger.warning(
+                    f"LLM HTTP error (attempt {attempt + 1}): status={status_code}, {exc}"
+                )
+                if status_code in (401, 403):
+                    raise LLMAuthError(
+                        "API Key 无效或服务不可用，请检查 .env 中的 TEACHER_SKILL_API_KEY 配置"
+                    ) from exc
+                if status_code == 429:
+                    if attempt == self.max_retries - 1:
+                        raise LLMRateLimitError("请求过于频繁，请稍后再试") from exc
+                    delay = 2 ** attempt
+                    self.logger.info(f"Rate limit, backing off for {delay}s")
+                    time.sleep(delay)
+                    continue
+                if attempt == self.max_retries - 1:
+                    raise LLMResponseError(
+                        f"LLM 服务返回错误：HTTP {status_code}"
+                    ) from exc
             except Exception as exc:
                 self.logger.warning(f"LLM call attempt {attempt + 1} failed: {exc}")
                 if attempt == self.max_retries - 1:
@@ -134,6 +174,91 @@ class LLMClient:
 
         # Should never reach here, but keeps type-checker happy
         return ""
+
+    @staticmethod
+    def _read_api_key() -> str | None:
+        """Read the API key from new generic vars, then legacy/provider vars."""
+
+        return (
+            os.getenv("TEACHER_SKILL_API_KEY")
+            or os.getenv("ANTHROPIC_API_KEY")
+            or os.getenv("MOONSHOT_API_KEY")
+            or os.getenv("DEEPSEEK_API_KEY")
+        )
+
+    def _generate_anthropic(
+        self,
+        *,
+        model: str,
+        system_prompt: str,
+        user_message: str,
+        max_tokens: int,
+        temperature: float,
+        timeout: int,
+    ) -> str:
+        """Generate with the Anthropic Messages API."""
+
+        if self.client is None:
+            raise ValueError("Anthropic client is not initialized")
+
+        response = self.client.messages.create(
+            model=model,
+            system=system_prompt,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            messages=[{"role": "user", "content": user_message}],
+            timeout=timeout,
+        )
+        return self._extract_text(response)
+
+    def _generate_openai_compatible(
+        self,
+        *,
+        model: str,
+        system_prompt: str,
+        user_message: str,
+        max_tokens: int,
+        temperature: float,
+        timeout: int,
+    ) -> str:
+        """Generate with an OpenAI-compatible chat-completions endpoint."""
+
+        if not self.base_url:
+            raise ValueError("OpenAI-compatible providers require llm.base_url")
+
+        url = self._chat_completions_url(self.base_url)
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ],
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        }
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        with httpx.Client(timeout=timeout) as client:
+            response = client.post(url, json=payload, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+
+        try:
+            content = data["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise LLMResponseError("LLM 响应格式异常，未找到 choices[0].message.content") from exc
+        return "" if content is None else str(content)
+
+    @staticmethod
+    def _chat_completions_url(base_url: str) -> str:
+        """Return the full chat-completions URL for an OpenAI-compatible API."""
+
+        normalized = base_url.rstrip("/")
+        if normalized.endswith("/chat/completions"):
+            return normalized
+        return normalized + "/chat/completions"
 
     @staticmethod
     def _extract_text(response) -> str:

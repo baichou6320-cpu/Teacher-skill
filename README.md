@@ -53,52 +53,39 @@ Teacher-skill 不是一个更快的总结器。它的目标是解决学习里的
 
 ## 快速开始
 
-需要 Python 3.11+ 和 Git。固定 3 分钟演示不依赖 API；真实学习流程需要一个 Anthropic 兼容 API Key。
+需要 Python 3.11+ 和 Git。固定 3 分钟演示不依赖 API；真实学习流程需要一个 LLM API Key（支持 Anthropic / Kimi / DeepSeek 等）。
 
 ```bash
 git clone https://github.com/baichou6320-cpu/Teacher-skill.git
 cd Teacher-skill
 
-python main.py --init
 python -m pip install -r requirements.txt
-python main.py --check
-python demo_full_loop.py
-python main.py --demo
+python main.py
 ```
 
-第一次运行后，打开 `.env`，填写：
+首次运行 `python main.py` 时，系统会自动检测环境。如果缺少配置，会引导你进入交互式配置向导：
 
-```text
-ANTHROPIC_API_KEY=your_api_key_here
-```
+1. **选择模型服务商**（Claude / Kimi / DeepSeek / 自定义接口）
+2. **粘贴 API Key**
+3. 自动写入 `.env` 和 `config.yaml`
 
-模型和生成参数不要写在 `.env`，统一在 `config.yaml` 中配置：
+配置完成后即可开始学习。
 
-```yaml
-llm:
-  model_id: "claude-sonnet-4-20250514"
-  temperature: 0.7
-  max_tokens: 2048
-```
-
-如果你使用 Kimi/Moonshot 等 Anthropic 兼容接口，可以同时配置：
-
-```text
-# .env
-ANTHROPIC_BASE_URL=https://api.moonshot.cn/anthropic
-```
-
-```yaml
-# config.yaml
-llm:
-  model_id: "kimi-k2.5"
-```
+> 无 API Key 时也可以先运行 `python main.py --check` 检查环境，或 `python demo_full_loop.py` 体验固定演示。
 
 ## 四种启动方式
 
-### 1. 固定 3 分钟演示
+### 1. 直接运行（推荐）
 
-适合给老板、评审或面试官展示：固定流程、固定数据、不依赖 API、不等待现场输入。
+自动检测环境，缺失配置时会引导你完成 setup。
+
+```bash
+python main.py
+```
+
+### 2. 固定 3 分钟演示
+
+不依赖 API、不等待现场输入，适合展示。
 
 ```bash
 python demo_full_loop.py
@@ -106,39 +93,23 @@ python demo_full_loop.py
 
 配套话术见 [`docs/demo/three-minute-demo.md`](docs/demo/three-minute-demo.md)。
 
-### 2. 先跑真实 Demo
-
-适合第一次体验，不需要准备材料，但仍需要 API Key。
-
-```bash
-python main.py --demo
-```
-
-Demo 会使用内置短文 `samples/demo_article.md`，带你走完整个学习闭环。
-
 ### 3. 从文件开始学习
-
-推荐正式使用时走这个入口。
 
 ```bash
 python main.py --file article.md
 ```
 
-支持：
+支持 `.md` / `.txt` / `.pdf`。
 
-```text
-.md
-.txt
-.pdf
-```
+### 4. 手动配置向导
 
-### 4. 进入交互模式
-
-适合已有历史主题、想恢复进度、想复习旧内容，或想手动粘贴材料。
+如果你希望主动运行配置向导（选择模型、粘贴 API Key）：
 
 ```bash
-python main.py
+python main.py --setup
 ```
+
+配置完成后，后续直接运行 `python main.py` 即可。
 
 在交互模式中可以输入：
 
@@ -317,15 +288,16 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
 ### 没有 API Key 能不能跑
 
-可以运行初始化、环境检查和单元测试：
+可以运行环境检查和单元测试：
 
 ```bash
-python main.py --init
 python main.py --check
 pytest tests/unit/
 ```
 
-但 `--demo`、`--file` 和真实学习流程需要可用的 LLM API Key。
+但真实学习流程（`--demo`、`--file`、交互模式）需要可用的 LLM API Key。
+
+首次运行 `python main.py` 时会自动引导你配置；或手动运行 `python main.py --setup`。
 
 ### 为什么 `/direct` 后还要标记待巩固
 
