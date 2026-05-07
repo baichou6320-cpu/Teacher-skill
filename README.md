@@ -12,7 +12,7 @@
     </a>
     <img alt="Python 3.11+" src="https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white">
     <img alt="License MIT" src="https://img.shields.io/badge/License-MIT-green">
-    <img alt="Interface CLI" src="https://img.shields.io/badge/Interface-CLI-0F766E">
+    <img alt="Interface CLI + Local Web" src="https://img.shields.io/badge/Interface-CLI%20%2B%20Local%20Web-0F766E">
   </p>
 </div>
 
@@ -42,6 +42,7 @@ Teacher-skill 不是一个更快的总结器。它的目标是解决学习里的
 | 核心教学闭环 | 可用 |
 | CLI 初始化 | `python main.py --init` |
 | 环境检查 | `python main.py --check` |
+| 本地网站 | `python main.py --web` |
 | 固定 3 分钟演示 | `python demo_full_loop.py` |
 | Demo 体验 | `python main.py --demo` |
 | 文件输入 | `.md` / `.txt` / `.pdf` |
@@ -73,9 +74,33 @@ python main.py
 
 > 无 API Key 时也可以先运行 `python main.py --check` 检查环境，或 `python demo_full_loop.py` 体验固定演示。
 
-## 四种启动方式
+## 五种启动方式
 
-### 1. 直接运行（推荐）
+### 1. 本地网站模式
+
+启动一个只在本机可访问的网站，并自动打开浏览器。
+
+```bash
+python main.py --web
+```
+
+默认地址：
+
+```text
+http://127.0.0.1:8765/
+```
+
+这个模式不会把项目发布到公网。它会在本机启动 `api_server.py`，同时提供网页界面和 `/api/analyze` 本地接口。按 `Ctrl+C` 可以停止服务。
+
+首次运行时，`--web` 会先自动检查环境；如果缺少 API Key 或配置文件，会先进入配置向导，配置完成后继续打开网站。
+
+如果 8765 端口被占用，可以换一个端口：
+
+```bash
+python main.py --web --web-port 8787
+```
+
+### 2. 直接运行 CLI（推荐）
 
 自动检测环境，缺失配置时会引导你完成 setup。
 
@@ -83,7 +108,7 @@ python main.py
 python main.py
 ```
 
-### 2. 固定 3 分钟演示
+### 3. 固定 3 分钟演示
 
 不依赖 API、不等待现场输入，适合展示。
 
@@ -93,7 +118,7 @@ python demo_full_loop.py
 
 配套话术见 [`docs/demo/three-minute-demo.md`](docs/demo/three-minute-demo.md)。
 
-### 3. 从文件开始学习
+### 4. 从文件开始学习
 
 ```bash
 python main.py --file article.md
@@ -101,7 +126,7 @@ python main.py --file article.md
 
 支持 `.md` / `.txt` / `.pdf`。
 
-### 4. 手动配置向导
+### 5. 手动配置向导
 
 如果你希望主动运行配置向导（选择模型、粘贴 API Key）：
 

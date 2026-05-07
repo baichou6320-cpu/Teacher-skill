@@ -3,121 +3,173 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Teacher-skill Showcase</title>
+    <title>Teacher-skill Local</title>
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
-    <main class="app-shell">
-      <aside class="side-nav" aria-label="Demo navigation">
-        <div class="brand-lockup">
-          <div class="brand-mark">T</div>
+    <header class="app-topbar">
+      <div class="brand-lockup">
+        <div class="brand-mark">T</div>
+        <div>
+          <div class="brand-name">Teacher-skill</div>
+          <div class="brand-caption">本地启发式学习工作台</div>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <button id="demoResetButton" class="status-pill demo-control" type="button" hidden>重置演示</button>
+        <span class="status-pill" id="runtimeStatus">本地预览</span>
+        <span class="status-pill muted">127.0.0.1</span>
+      </div>
+    </header>
+
+    <main class="workspace-shell">
+      <aside class="panel sources-panel" aria-label="资料输入区">
+        <div class="panel-title-row">
           <div>
-            <div class="brand-name">Teacher-skill</div>
-            <div class="brand-caption">启发式数字助教</div>
+            <h1>Sources</h1>
           </div>
+          <button class="panel-icon-button" title="收起资料栏" aria-label="收起资料栏">▯</button>
         </div>
 
-        <nav class="step-list" aria-label="Presentation flow">
-          <button class="step-item is-active" data-step="0">
-            <span>01</span>
-            <strong>材料输入</strong>
-          </button>
-          <button class="step-item" data-step="1">
-            <span>02</span>
-            <strong>知识拆解</strong>
-          </button>
-          <button class="step-item" data-step="2">
-            <span>03</span>
-            <strong>提问判卷</strong>
-          </button>
-          <button class="step-item" data-step="3">
-            <span>04</span>
-            <strong>复习报告</strong>
-          </button>
-        </nav>
+        <section class="source-add-section">
+          <label class="add-source-pill">
+            <span>＋</span>
+            <strong>Add sources</strong>
+            <input id="sourceUpload" type="file" accept=".txt,.md,.markdown,.pdf,text/plain,text/markdown,application/pdf" multiple>
+          </label>
 
-        <div class="proof-strip">
-          <div>
-            <span>Unit Tests</span>
-            <strong>148/148</strong>
-          </div>
-          <div>
-            <span>Demo Time</span>
-            <strong>3 min</strong>
-          </div>
-        </div>
-      </aside>
-
-      <section class="workspace">
-        <header class="topbar">
-          <div>
-            <p class="eyebrow">Boss Demo Prototype</p>
-            <h1>把学习材料变成可验证的学习闭环</h1>
-          </div>
-          <div class="topbar-actions">
-            <button id="prevStep" class="icon-button" title="上一步" aria-label="上一步">‹</button>
-            <button id="nextStep" class="primary-button">下一步</button>
-          </div>
-        </header>
-
-        <section class="demo-grid">
-          <div class="material-panel">
-            <div class="panel-heading">
-              <span class="status-dot"></span>
-              <h2>学习材料</h2>
+          <div class="source-hint-card">
+            <div class="hint-search-row">
+              <span class="search-icon">⌕</span>
+              <span>也可以直接在中间对话框粘贴资料</span>
+              <span class="send-dot">➜</span>
             </div>
-            <textarea id="materialInput" aria-label="学习材料">Transformer 是一种基于注意力机制的深度学习架构。它抛弃了 RNN 的逐步循环计算，用自注意力一次性建模序列中不同 token 之间的关系。由于没有天然的顺序结构，Transformer 需要位置编码告诉模型每个 token 在序列中的位置。多头注意力会并行学习多组关系，让模型同时捕捉语义、语法和长距离依赖。</textarea>
-            <div class="material-meta">
-              <span id="charCount">0 字符</span>
-              <button id="analyzeButton">生成知识卡片</button>
+            <div class="source-type-row">
+              <span class="source-type-chip">TXT</span>
+              <span class="source-type-chip">MD</span>
+              <span class="source-type-chip">PDF</span>
             </div>
-          </div>
-
-          <div class="cards-panel">
-            <div class="panel-heading">
-              <span class="status-dot amber"></span>
-              <h2>知识卡片</h2>
-            </div>
-            <div class="knowledge-list" id="knowledgeList"></div>
-          </div>
-
-          <div class="teaching-panel">
-            <div class="panel-heading">
-              <span class="status-dot blue"></span>
-              <h2>讲解与判卷</h2>
-            </div>
-            <div class="dialogue-box" id="dialogueBox"></div>
-            <div class="answer-row">
-              <input id="answerInput" type="text" value="选 B。自注意力在计算 token 之间的关系权重。" aria-label="用户回答">
-              <button id="submitAnswer">提交回答</button>
-              <button id="directAnswer" class="secondary-button">速查</button>
-            </div>
-          </div>
-
-          <div class="report-panel">
-            <div class="panel-heading">
-              <span class="status-dot green"></span>
-              <h2>学习报告</h2>
-            </div>
-            <div class="metric-grid">
-              <div class="metric">
-                <span>已掌握</span>
-                <strong id="masteredMetric">0</strong>
-              </div>
-              <div class="metric">
-                <span>待巩固</span>
-                <strong id="reviewMetric">0</strong>
-              </div>
-              <div class="metric">
-                <span>完成率</span>
-                <strong id="rateMetric">0%</strong>
-              </div>
-            </div>
-            <div class="report-timeline" id="reportTimeline"></div>
           </div>
         </section>
+
+        <section class="source-list-section">
+          <div class="source-list-header">
+            <div class="section-label">Saved sources</div>
+            <span class="status-pill muted" id="sourceCountLabel">0</span>
+          </div>
+          <div id="sourceList" class="source-list"></div>
+        </section>
+      </aside>
+
+      <section class="panel chat-panel" aria-label="对话学习区">
+        <div class="panel-title-row">
+          <div>
+            <p class="eyebrow">Chat</p>
+            <h1>问答学习</h1>
+          </div>
+          <span class="status-pill" id="activeTopicLabel">等待资料</span>
+        </div>
+
+        <div id="dialogueBox" class="chat-stream"></div>
+
+        <div class="answer-composer">
+          <input id="answerInput" type="text" placeholder="输入你的回答..." aria-label="用户回答">
+          <button id="submitAnswer" class="primary-button">提交</button>
+          <button id="directAnswer" class="ghost-button">速查</button>
+        </div>
       </section>
+
+      <aside class="panel studio-panel" aria-label="学习状态区">
+        <div class="panel-title-row">
+          <div>
+            <p class="eyebrow">Studio</p>
+            <h1>学习状态</h1>
+          </div>
+          <span class="status-pill muted" id="cardCountLabel">0 张卡片</span>
+        </div>
+
+        <div class="stage-list" aria-label="学习阶段">
+          <button class="stage-item is-active" data-step="0">
+            <span>01</span>
+            <strong>添加资料</strong>
+          </button>
+          <button class="stage-item" data-step="1">
+            <span>02</span>
+            <strong>说明目标</strong>
+          </button>
+          <button class="stage-item" data-step="2">
+            <span>03</span>
+            <strong>生成卡片</strong>
+          </button>
+          <button class="stage-item" data-step="3">
+            <span>04</span>
+            <strong>问答复习</strong>
+          </button>
+        </div>
+
+        <section class="studio-section compact-section">
+          <div class="section-label">学习进度</div>
+          <div class="progress-panel">
+            <div class="progress-row">
+              <span id="currentStageLabel">等待资料</span>
+              <strong id="progressText">0%</strong>
+            </div>
+            <div class="progress-track">
+              <div id="progressBar" class="progress-bar"></div>
+            </div>
+            <div class="progress-detail-grid">
+              <div>
+                <span>当前卡片</span>
+                <strong id="currentCardLabel">-</strong>
+              </div>
+              <div>
+                <span>学习资料</span>
+                <strong id="sourceUsedLabel">0</strong>
+              </div>
+            </div>
+            <div class="progress-goal">
+              <span>学习目标</span>
+              <strong id="learningGoalLabel">等待你说明想学什么</strong>
+            </div>
+          </div>
+        </section>
+
+        <section class="studio-section compact-section">
+          <div class="section-label">学习风格</div>
+          <div class="style-grid">
+            <button class="style-option is-active" data-style="苏格拉底">苏格拉底</button>
+            <button class="style-option" data-style="追问">追问</button>
+            <button class="style-option" data-style="速查">速查</button>
+          </div>
+          <div id="nextActionLabel" class="next-action">添加资料后，先在中间说你想学习什么，再开始生成卡片。</div>
+        </section>
+
+        <section class="studio-section">
+          <div class="section-label">知识卡片</div>
+          <div id="knowledgeList" class="knowledge-list"></div>
+        </section>
+
+        <section class="studio-section">
+          <div class="section-label">学习报告</div>
+          <div class="metric-grid">
+            <div class="metric">
+              <span>已掌握</span>
+              <strong id="masteredMetric">0</strong>
+            </div>
+            <div class="metric">
+              <span>待巩固</span>
+              <strong id="reviewMetric">0</strong>
+            </div>
+            <div class="metric">
+              <span>完成率</span>
+              <strong id="rateMetric">0%</strong>
+            </div>
+          </div>
+          <div id="reportTimeline" class="report-timeline"></div>
+        </section>
+      </aside>
     </main>
+
     <script src="app.js"></script>
   </body>
 </html>

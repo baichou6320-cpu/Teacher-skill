@@ -114,6 +114,20 @@ only affect local test commands, not normal learning.
 
 ## Run
 
+Local web mode:
+
+```bash
+python main.py --web
+```
+
+This starts a website on `http://127.0.0.1:8765/` and opens your browser. It is a
+local-only server, not a public deployment. The page calls the same local
+`/api/analyze` endpoint used by the Python bridge.
+
+On first run, `--web` checks the environment. If the API key or model config is
+missing, it starts the setup wizard first and then continues to the local
+website after setup succeeds.
+
 Quick demo mode:
 
 ```bash

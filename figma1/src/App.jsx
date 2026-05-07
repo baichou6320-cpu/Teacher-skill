@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-const API_URL = "http://127.0.0.1:8765/api/analyze";
+const API_URL = "/api/analyze";
 
 const demoMaterial = `AI 安全基础学习材料
 

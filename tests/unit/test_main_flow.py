@@ -362,6 +362,77 @@ class TestEnvironmentCheck:
         assert 'model_id: "deepseek-chat"' in config_text
         assert any(action["item"] == "config.yaml" and action["status"] == "已配置" for action in actions)
 
+    def test_web_environment_ready_passes_without_setup(self, monkeypatch):
+        monkeypatch.setattr(
+            main,
+            "collect_environment_checks",
+            lambda project_root=None: ([], True),
+        )
+        setup = Mock(return_value=True)
+        monkeypatch.setattr(main, "run_setup_wizard", setup)
+
+        assert main.ensure_web_environment_ready() is True
+        setup.assert_not_called()
+
+    def test_web_environment_ready_runs_setup_for_missing_config(self, monkeypatch):
+        checks_after_setup = [
+            {"name": "API Key", "passed": True, "required": True, "detail": "已配置"}
+        ]
+        results = iter(
+            [
+                (
+                    [
+                        {
+                            "name": "API Key",
+                            "passed": False,
+                            "required": True,
+                            "detail": "未配置",
+                        }
+                    ],
+                    False,
+                ),
+                (checks_after_setup, True),
+            ]
+        )
+        monkeypatch.setattr(
+            main,
+            "collect_environment_checks",
+            lambda project_root=None: next(results),
+        )
+        setup = Mock(return_value=True)
+        reload_env = Mock(return_value=True)
+        monkeypatch.setattr(main, "run_setup_wizard", setup)
+        monkeypatch.setattr(main, "load_dotenv", reload_env)
+
+        assert main.ensure_web_environment_ready() is True
+        setup.assert_called_once()
+        reload_env.assert_called_once()
+
+    def test_web_environment_ready_blocks_when_runtime_deps_missing(self, monkeypatch):
+        monkeypatch.setattr(
+            main,
+            "collect_environment_checks",
+            lambda project_root=None: (
+                [
+                    {
+                        "name": "运行依赖",
+                        "passed": False,
+                        "required": True,
+                        "detail": "缺少：pydantic",
+                    }
+                ],
+                False,
+            ),
+        )
+        setup = Mock(return_value=True)
+        check = Mock(return_value=False)
+        monkeypatch.setattr(main, "run_setup_wizard", setup)
+        monkeypatch.setattr(main, "run_environment_check", check)
+
+        assert main.ensure_web_environment_ready() is False
+        setup.assert_not_called()
+        check.assert_called_once()
+
 
 class TestResumeTopicFlow:
     """Tests for resuming existing topics."""

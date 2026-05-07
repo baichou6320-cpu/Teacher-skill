@@ -27,6 +27,7 @@
 - CLI 可用性修复已推进：支持 `--init` 项目初始化、`--check` 启动环境检查（依赖缺失时也能轻量解析配置）、`--demo` 示例体验、推荐 `--file`、支持 `/load` 追加材料、支持 `/skip`/`/back`/`/list`/`/jump`/`/review`、历史 topic 显示可读标题、答案提交确认、温和错误反馈 ✅
 - 复习模式已形成可用闭环：完成主题后自动写入 `profile.history_topics`，可用 `/history` 查看历史学习记录，支持“复习一下 xxx”匹配历史主题，按薄弱点优先直接提问，接入复习专用短反馈 Prompt，并在复习结束后输出统计报告、更新 `last_reviewed_at` ✅
 - CLI 工程结构已开始模块化：`main.py` 拆出 `src/cli/environment.py`、`src/cli/display.py`、`src/cli/review.py`，入口文件从“所有逻辑集中”转为“入口 + 应用编排 + 兼容包装” ✅
+- 本地网站模式已建立：`python main.py --web` 会启动只监听 `127.0.0.1` 的本地网页和 API 服务，当前作为本地原型入口，不做公网发布 ✅
 
 **结论：Phase 2 核心教学闭环 + 工程基建已可用。**
 
@@ -53,6 +54,7 @@
 | 单元测试 | `tests/unit/` | ✅ 通过 | 本地虚拟环境下 `148/148 passed` |
 | Agent Skill | `skills/heuristic-teacher/SKILL.md` | ✅ 已建立 | 独立于产品文档，包含工作流与验证标准 |
 | CI | `.github/workflows/tests.yml` | ✅ 通过 | GitHub Actions `Tests` workflow 已跑绿 |
+| 本地网站 | `main.py --web` / `api_server.py` / `showcase/` | ✅ 原型可用 | 本地网页入口 + `/api/analyze`，不发布公网 |
 
 ---
 

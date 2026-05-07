@@ -143,6 +143,47 @@ def run_environment_check() -> bool:
     )
 
 
+def ensure_web_environment_ready() -> bool:
+    """Prepare first-run config before launching the local website."""
+    checks, is_ready = collect_environment_checks(project_root=PROJECT_ROOT)
+    if is_ready:
+        console.print("[green]环境检查通过，准备打开本地网站。[/green]\n")
+        return True
+
+    failed_required = [
+        check
+        for check in checks
+        if not bool(check["passed"]) and bool(check["required"])
+    ]
+    failed_names = {str(check["name"]) for check in failed_required}
+
+    if "运行依赖" in failed_names or "Python 版本" in failed_names:
+        run_environment_check()
+        console.print(
+            "[yellow]请先运行：python -m pip install -r requirements.txt[/yellow]"
+        )
+        return False
+
+    console.print(
+        "[yellow]检测到本地网站首次运行所需配置还没完成。[/yellow]"
+    )
+    console.print("[dim]我会先启动配置向导，完成后继续打开网站。[/dim]\n")
+
+    if not run_setup_wizard():
+        return False
+
+    # The process may have loaded placeholder values before setup rewrote .env.
+    # Reload with override so the web API starts with the freshly configured key.
+    load_dotenv(PROJECT_ROOT / ".env", override=True)
+    checks, is_ready = collect_environment_checks(project_root=PROJECT_ROOT)
+    if is_ready:
+        console.print("[green]配置和环境检查已通过，准备打开本地网站。[/green]\n")
+        return True
+
+    run_environment_check()
+    return False
+
+
 class TeacherSkillApp:
     """Teacher-skill main application — CLI interaction and lifecycle."""
 
@@ -1137,9 +1178,14 @@ def main() -> None:
     """Application entry point."""
     parser = argparse.ArgumentParser(
         description="🎓 Teacher-skill 数字助教",
-        epilog="推荐用法: python main.py --demo 或 python main.py --file article.md",
+        epilog="推荐用法: python main.py --web、python main.py --demo 或 python main.py --file article.md",
     )
     input_group = parser.add_mutually_exclusive_group()
+    input_group.add_argument(
+        "--web",
+        action="store_true",
+        help="启动本地网站模式，只监听 127.0.0.1，并自动打开浏览器",
+    )
     input_group.add_argument(
         "--file",
         help="从文件加载学习材料（支持 .md/.txt/.pdf）",
@@ -1165,7 +1211,21 @@ def main() -> None:
         action="store_true",
         help="已合并到 --setup，请使用 --setup 或直接运行 main.py",
     )
+    parser.add_argument(
+        "--web-port",
+        type=int,
+        default=8765,
+        help="本地网站端口，默认 8765，仅在 --web 模式下使用",
+    )
+    parser.add_argument(
+        "--recording-demo",
+        action="store_true",
+        help="录屏演示模式：配合 --web 使用，打开固定离线演示流程，便于稳定录制小视频",
+    )
     args = parser.parse_args()
+
+    if args.recording_demo and not args.web:
+        parser.error("--recording-demo 需要配合 --web 使用，例如：python main.py --web --recording-demo")
 
     # --init 是 --setup 的别名，保持向后兼容
     if args.setup or args.init:
@@ -1175,6 +1235,43 @@ def main() -> None:
 
     if args.check:
         if not run_environment_check():
+            sys.exit(1)
+        return
+
+    if args.web:
+        if args.recording_demo:
+            try:
+                from demo_server import HOST, run_server
+            except ModuleNotFoundError as exc:
+                console.print(f"[red]录屏演示服务启动失败：{exc.name}[/red]")
+                sys.exit(1)
+        else:
+            if not ensure_web_environment_ready():
+                sys.exit(1)
+
+            try:
+                from api_server import HOST, run_server
+            except ModuleNotFoundError as exc:
+                console.print(f"[red]缺少本地网站运行依赖：{exc.name}[/red]")
+                console.print("[yellow]请先运行：python -m pip install -r requirements.txt[/yellow]")
+                sys.exit(1)
+
+        console.print("[green]正在启动 Teacher-skill 本地网站...[/green]")
+        browser_url = f"http://{HOST}:{args.web_port}/"
+        if args.recording_demo:
+            browser_url = f"{browser_url}?demo=1"
+        console.print(
+            f"[dim]浏览器将打开：{browser_url}[/dim]"
+        )
+        console.print("[dim]按 Ctrl+C 可停止本地网站服务。[/dim]\n")
+        try:
+            run_server(port=args.web_port, open_browser=True, recording_demo=args.recording_demo)
+        except OSError as exc:
+            console.print(f"[red]本地网站启动失败：{exc}[/red]")
+            console.print(
+                f"[yellow]端口 {args.web_port} 可能被占用，可以换成："
+                f"python main.py --web --web-port {args.web_port + 1}[/yellow]"
+            )
             sys.exit(1)
         return
 
